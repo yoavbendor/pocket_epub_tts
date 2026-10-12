@@ -22,6 +22,9 @@
   const $ = (id) => document.getElementById(id);
   const els = {
     settings: $('settings-card'),
+    engine: $('engine'),
+    serverField: $('server-field'),
+    prepare: $('prepare'),
     server: $('server'),
     voice: $('voice'),
     testServer: $('test-server'),
@@ -115,15 +118,15 @@
     await txDone(t);
   }
 
-  // Removes cached audio of this book that is behind the reader or in another voice.
-  async function evictAudio(bookId, voice, before) {
+  // Removes cached audio of this book that is behind the reader or from another engine/voice.
+  async function evictAudio(bookId, variant, before) {
     const db = await openDb();
     const t = db.transaction('audio', 'readwrite');
     const cursor = t.objectStore('audio').index('bookId').openCursor(IDBKeyRange.only(bookId));
     cursor.onsuccess = () => {
       const c = cursor.result;
       if (!c) return;
-      if (c.value.voice !== voice || c.value.index < before) c.delete();
+      if (c.value.voice !== variant || c.value.index < before) c.delete();
       c.continue();
     };
     await txDone(t);
@@ -156,6 +159,16 @@
     return els.voice.value;
   }
 
+  // 'browser' runs the model on this device; 'server' calls a pocket-tts server.
+  function currentEngine() {
+    return els.engine.value === 'server' ? 'server' : 'browser';
+  }
+
+  // Cached audio depends on both the engine and the voice, so the variant is part of its key.
+  function currentVariant() {
+    return `${currentEngine()}:${currentVoice()}`;
+  }
+
   function checkServerUrl() {
     const url = serverUrl();
     if (!url) return 'Enter the pocket-tts URL first.';
@@ -181,7 +194,7 @@
     return run;
   }
 
-  async function synthesize(text, voice) {
+  async function synthesizeOnServer(text, voice) {
     const problem = checkServerUrl();
     if (problem) throw new Error(problem);
     const body = new FormData();
@@ -193,18 +206,78 @@
     return new Blob([wav], { type: 'audio/wav' });
   }
 
+  // ---------- On-device engine (pocket-tts-js, vendored under vendor/) ----------
+
+  // Language bundle downloaded by the on-device engine.
+  const DEVICE_LANGUAGE = 'english_2026-04';
+  let deviceModule = null;
+  let deviceTts = null;
+  let deviceLoading = null;
+  const deviceVoices = new Map(); // voice name -> reference returned by loadVoice()
+
+  // Loaded on first use, so the server-only path never downloads the engine code.
+  function loadDeviceModule() {
+    deviceModule ||= import('./vendor/pocket-tts-js/index.js');
+    return deviceModule;
+  }
+
+  // Downloads the model once per page load. The worker caches it in Cache Storage afterwards.
+  function loadDeviceEngine() {
+    if (deviceTts) return Promise.resolve(deviceTts);
+    if (deviceLoading) return deviceLoading;
+    deviceLoading = (async () => {
+      if (typeof Worker === 'undefined' || typeof WebAssembly === 'undefined') {
+        throw new Error('This browser cannot run the voice on the device. Use the server engine instead.');
+      }
+      const { PocketTTS } = await loadDeviceModule();
+      const tts = new PocketTTS({ language: DEVICE_LANGUAGE, quantized: true, voiceCloning: false });
+      await tts.load((p) => {
+        if (p.total) setStatus(`Downloading ${p.label || 'voice model'}: ${Math.floor((p.loaded / p.total) * 100)}%`);
+        else if (p.status) setStatus(p.status);
+      });
+      deviceTts = tts;
+      return tts;
+    })().catch((err) => {
+      deviceLoading = null;
+      throw err;
+    });
+    return deviceLoading;
+  }
+
+  async function synthesizeOnDevice(text, voice) {
+    const tts = await loadDeviceEngine();
+    let ref = deviceVoices.get(voice);
+    if (!ref) {
+      ref = await tts.loadVoice(voice);
+      deviceVoices.set(voice, ref);
+    }
+    const pcmChunks = [];
+    await tts.generate(text, { voice: ref, onChunk: (pcm) => pcmChunks.push(pcm) });
+    if (!pcmChunks.length) throw new Error('The on-device voice produced no audio for this paragraph.');
+    const { chunksToWavBlob } = await loadDeviceModule();
+    return chunksToWavBlob(pcmChunks, tts.sampleRate);
+  }
+
+  // `variant` is 'browser:<voice>' or 'server:<voice>', as built by currentVariant().
+  function synthesize(text, variant) {
+    const sep = variant.indexOf(':');
+    const engine = variant.slice(0, sep);
+    const voice = variant.slice(sep + 1);
+    return engine === 'server' ? synthesizeOnServer(text, voice) : synthesizeOnDevice(text, voice);
+  }
+
   const inflight = new Map();
-  const chunkKey = (bookId, voice, index) => `${bookId}|${voice}|${index}`;
+  const chunkKey = (bookId, variant, index) => `${bookId}|${variant}|${index}`;
 
   // Returns the WAV for one paragraph, from the IndexedDB cache when possible.
-  function getChunkBlob(bookId, voice, index, text) {
-    const key = chunkKey(bookId, voice, index);
+  function getChunkBlob(bookId, variant, index, text) {
+    const key = chunkKey(bookId, variant, index);
     if (inflight.has(key)) return inflight.get(key);
     const job = (async () => {
       const cached = await idbGet('audio', key);
       if (cached) return cached.blob;
-      const blob = await serial(() => synthesize(text, voice));
-      await idbPut('audio', { key, bookId, voice, index, blob });
+      const blob = await serial(() => synthesize(text, variant));
+      await idbPut('audio', { key, bookId, voice: variant, index, blob });
       return blob;
     })().finally(() => inflight.delete(key));
     inflight.set(key, job);
@@ -213,12 +286,12 @@
 
   function prefetch() {
     const { book, chunks, index } = state;
-    const voice = currentVoice();
+    const variant = currentVariant();
     const last = Math.min(index + LOOKAHEAD, chunks.length - 1);
     for (let i = index + 1; i <= last; i++) {
-      getChunkBlob(book.id, voice, i, chunks[i]).catch(() => {});
+      getChunkBlob(book.id, variant, i, chunks[i]).catch(() => {});
     }
-    evictAudio(book.id, voice, index - 1).catch(() => {});
+    evictAudio(book.id, variant, index - 1).catch(() => {});
   }
 
   // ---------- Playback ----------
@@ -271,12 +344,12 @@
   async function startCurrent() {
     const gen = ++state.gen;
     const { book, chunks, index } = state;
-    const voice = currentVoice();
-    const key = chunkKey(book.id, voice, index);
+    const variant = currentVariant();
+    const key = chunkKey(book.id, variant, index);
     try {
       if (state.loaded !== key) {
         setStatus(`Loading paragraph ${index + 1} of ${chunks.length}…`);
-        const blob = await getChunkBlob(book.id, voice, index, chunks[index]);
+        const blob = await getChunkBlob(book.id, variant, index, chunks[index]);
         if (gen !== state.gen) return;
         setSource(blob, key);
         state.pendingSeek = state.offset;
@@ -298,7 +371,7 @@
     if (!state.book) return;
     state.playing = true;
     render();
-    if (state.loaded !== chunkKey(state.book.id, currentVoice(), state.index)) {
+    if (state.loaded !== chunkKey(state.book.id, currentVariant(), state.index)) {
       // Unlock inside the tap, before any await. The silent clip is not the current source,
       // so its events are ignored by the handlers below.
       state.loaded = null;
@@ -605,13 +678,41 @@
     els.voice.value = VOICES.includes(saved) ? saved : DEFAULT_VOICE;
   }
 
+  function showEngineFields() {
+    const server = currentEngine() === 'server';
+    els.serverField.hidden = !server;
+    els.testServer.hidden = !server;
+    els.serverMsg.textContent = '';
+    els.prepare.hidden = server;
+  }
+
+  async function prepareDevice() {
+    els.prepare.disabled = true;
+    try {
+      await loadDeviceEngine();
+      setStatus('Voice model ready on this device.');
+    } catch (err) {
+      setStatus(describeError(err), true);
+    } finally {
+      els.prepare.disabled = false;
+    }
+  }
+
   function init() {
     populateVoices();
+    const savedEngine = storage.get('pet.engine');
+    els.engine.value = savedEngine === 'server' ? 'server' : 'browser';
+    els.engine.addEventListener('change', () => {
+      storage.set('pet.engine', currentEngine());
+      showEngineFields();
+    });
+    els.prepare.addEventListener('click', prepareDevice);
     els.server.value = storage.get('pet.server') || '';
     els.server.addEventListener('change', () => storage.set('pet.server', serverUrl()));
     // Settings are only shown in the library, so the voice never changes under a playing book.
     els.voice.addEventListener('change', () => storage.set('pet.voice', currentVoice()));
     els.testServer.addEventListener('click', testServer);
+    showEngineFields();
 
     els.file.addEventListener('change', async () => {
       const file = els.file.files[0];

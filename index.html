@@ -38,6 +38,7 @@
       --danger: #ff6961;
     }
     * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
     body {
       margin: 0;
       background: var(--bg);
@@ -115,18 +116,30 @@
     <h1>Pocket EPUB TTS</h1>
 
     <section class="card" id="settings-card">
-      <h2>Server</h2>
+      <h2>Voice</h2>
       <label>
-        pocket-tts URL (must be https:// when this page is https)
-        <input id="server" type="url" inputmode="url" placeholder="https://tts.example.com" autocapitalize="off" autocorrect="off" spellcheck="false">
+        Where the voice runs
+        <select id="engine">
+          <option value="browser">On this phone (no server)</option>
+          <option value="server">My pocket-tts server</option>
+        </select>
       </label>
       <label>
         Voice
         <select id="voice"></select>
       </label>
       <div class="row">
-        <button id="test-server" class="secondary small" type="button">Test server</button>
-        <span id="server-msg" class="muted"></span>
+        <button id="prepare" class="secondary small" type="button">Download voice model</button>
+      </div>
+      <div id="server-field">
+        <label>
+          pocket-tts URL (must be https:// when this page is https)
+          <input id="server" type="url" inputmode="url" placeholder="https://tts.example.com" autocapitalize="off" autocorrect="off" spellcheck="false">
+        </label>
+        <div class="row">
+          <button id="test-server" class="secondary small" type="button">Test server</button>
+          <span id="server-msg" class="muted"></span>
+        </div>
       </div>
     </section>
 
