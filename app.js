@@ -557,12 +557,13 @@
       finishRun();
       return;
     }
+    // Start the next part first; saving progress and redrawing wait until it is playing.
     state.index++;
     state.offset = 0;
-    saveProgress();
-    render();
     gapStart = performance.now();
     if (!swapToPreloaded()) startCurrent();
+    saveProgress();
+    render();
   });
 
   // The next part has started: record how long the switch took.
