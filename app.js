@@ -25,6 +25,8 @@
     engine: $('engine'),
     serverField: $('server-field'),
     prepare: $('prepare'),
+    backendField: $('backend-field'),
+    backend: $('backend'),
     server: $('server'),
     voice: $('voice'),
     testServer: $('test-server'),
@@ -704,6 +706,8 @@
     els.testServer.hidden = !server;
     els.serverMsg.textContent = '';
     els.prepare.hidden = server;
+    // The WebGPU option only appears where the browser offers WebGPU.
+    els.backendField.hidden = server || !(window.DeviceTTS && window.DeviceTTS.gpuAvailable());
   }
 
   async function prepareDevice() {
@@ -732,6 +736,14 @@
       showEngineFields();
     });
     els.prepare.addEventListener('click', prepareDevice);
+    const savedBackend = storage.get('pet.backend') === 'gpu' ? 'gpu' : 'cpu';
+    els.backend.value = savedBackend;
+    if (window.DeviceTTS) window.DeviceTTS.setBackend(savedBackend);
+    els.backend.addEventListener('change', () => {
+      storage.set('pet.backend', els.backend.value);
+      window.DeviceTTS.setBackend(els.backend.value);
+      setStatus('Speed setting changed. Tap Download voice model or Play to load it.');
+    });
     els.server.value = storage.get('pet.server') || '';
     els.server.addEventListener('change', () => storage.set('pet.server', serverUrl()));
     // Settings are only shown in the library, so the voice never changes under a playing book.

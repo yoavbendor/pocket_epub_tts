@@ -20,6 +20,9 @@ served by GitHub Pages or any static host.
      about 146 MB of weights from Hugging Face. This build has 7 voices (alba, azelma,
      cosette, eponine, fantine, javert, marius). On a 4-core desktop it generated speech
      at about 1.1x real time. Phones have not been measured. `device-tts.js` wraps the worker.
+     **Speed on this phone** (shown where the browser offers WebGPU) switches to an experimental
+     WebGPU build in `vendor/pocket-tts-wasm-gpu/`. It is not measured on a phone yet. See its
+     `VENDORED.txt` and `BUILD.md`.
    - **My pocket-tts server:** each paragraph is sent to `POST /tts` on your server (the
      setup below).
    Each part is generated as its own WAV, cached in IndexedDB keyed by engine and voice, and

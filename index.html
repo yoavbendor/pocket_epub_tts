@@ -128,6 +128,13 @@
         Voice
         <select id="voice"></select>
       </label>
+      <label id="backend-field" hidden>
+        Speed on this phone
+        <select id="backend">
+          <option value="cpu">Standard (CPU)</option>
+          <option value="gpu">WebGPU (experimental)</option>
+        </select>
+      </label>
       <div class="row">
         <button id="prepare" class="secondary small" type="button">Download voice model</button>
       </div>

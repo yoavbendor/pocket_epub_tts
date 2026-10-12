@@ -9,7 +9,12 @@
 (function () {
   'use strict';
 
-  const WORKER_URL = './vendor/pocket-tts-wasm/worker.js';
+  // Two builds of the same model: CPU (WebAssembly SIMD) and WebGPU (experimental).
+  const WORKERS = {
+    cpu: './vendor/pocket-tts-wasm/worker.js',
+    gpu: './vendor/pocket-tts-wasm-gpu/worker.js',
+  };
+  let backend = 'cpu';
   // Voices that the vendored worker loads (its VOICE_NAMES list).
   const VOICES = ['alba', 'azelma', 'cosette', 'eponine', 'fantine', 'javert', 'marius'];
   const QUANT = 'q8'; // ~146 MB download; f32 is ~240 MB
@@ -88,7 +93,7 @@
     if (typeof Worker === 'undefined' || typeof WebAssembly === 'undefined') {
       throw new Error('This browser cannot run the voice on the device. Use the server engine instead.');
     }
-    worker = new Worker(WORKER_URL, { type: 'module' });
+    worker = new Worker(WORKERS[backend], { type: 'module' });
     worker.onmessage = onMessage;
     worker.onerror = (e) => failAll(new Error(e.message || 'The voice worker failed to start.'));
     return worker;
@@ -126,5 +131,21 @@
     });
   }
 
-  window.DeviceTTS = { VOICES, supported, load, generate };
+  // Switching backends restarts the worker. Any request in flight fails first.
+  function setBackend(name) {
+    if (!WORKERS[name] || name === backend) return;
+    failAll(new Error('The voice engine was switched; try again.'));
+    if (worker) worker.terminate();
+    worker = null;
+    ready = null;
+    loadPromise = null;
+    backend = name;
+  }
+
+  // WebGPU is only offered where the browser exposes navigator.gpu.
+  function gpuAvailable() {
+    return typeof navigator !== 'undefined' && Boolean(navigator.gpu);
+  }
+
+  window.DeviceTTS = { VOICES, supported, load, generate, setBackend, gpuAvailable, getBackend: () => backend };
 })();

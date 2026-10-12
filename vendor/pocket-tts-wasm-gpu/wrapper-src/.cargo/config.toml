@@ -1,0 +1,3 @@
+# SIMD128 only. Relaxed SIMD (iOS WebKit rejects it) is deliberately not enabled.
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "target-feature=+simd128", "--cfg", "getrandom_backend=\"wasm_js\""]

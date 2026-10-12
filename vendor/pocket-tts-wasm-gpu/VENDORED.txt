@@ -1,0 +1,19 @@
+Pocket TTS for the browser, WebGPU build (experimental).
+
+Files
+  worker.js          the CPU worker (../pocket-tts-wasm/worker.js) with three edits:
+                     `load_model` replaces the constructor, and `generation_step`
+                     is awaited (WebGPU read-backs are asynchronous).
+  ptts_wasm.js       wasm-bindgen glue, built from wrapper-src/
+  ptts_wasm_bg.wasm  compiled module (WebGPU backend of xn), built from wrapper-src/
+  ptts-webgpu-readback.patch
+                     patch for the ptts crate (=0.2.3): device-side sampling without
+                     host read-backs. Needed because a browser cannot block on the GPU.
+  wrapper-src/       Rust wrapper (ours) and its Cargo files. See BUILD.md.
+
+Status: runs end to end in headless Chromium (SwiftShader). Its first frames match
+the CPU build closely; later frames drift (floating point). Speed and sound on a real
+GPU have not been measured.
+
+Licenses: ptts and xn are MIT OR Apache-2.0 (LaurentMazare). worker.js is from the
+upstream demo (license not verified). The wrapper and the patch are ours.
