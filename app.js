@@ -672,8 +672,11 @@
   }
 
   function init() {
+    // First visit: use the phone only if this browser can run the on-device build.
     const savedEngine = storage.get('pet.engine');
-    els.engine.value = savedEngine === 'server' ? 'server' : 'browser';
+    const deviceOk = Boolean(window.DeviceTTS && window.DeviceTTS.supported());
+    const engine = savedEngine || (deviceOk ? 'browser' : 'server');
+    els.engine.value = engine === 'server' ? 'server' : 'browser';
     populateVoices();
     els.engine.addEventListener('change', () => {
       storage.set('pet.engine', currentEngine());

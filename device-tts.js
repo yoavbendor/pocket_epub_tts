@@ -15,6 +15,20 @@
   const QUANT = 'q8'; // ~146 MB download; f32 is ~240 MB
   const TEMPERATURE = 0.7; // the demo's default
 
+  // A 37-byte module whose only instruction is f32x4.relaxed_madd (a relaxed-SIMD opcode).
+  // Browsers without relaxed SIMD, such as iOS WebKit, reject the voice build outright.
+  const RELAXED_SIMD_PROBE = new Uint8Array([
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x01, 0x60, 0x03, 0x7b, 0x7b, 0x7b,
+    0x01, 0x7b, 0x03, 0x02, 0x01, 0x00, 0x0a, 0x0d, 0x01, 0x0b, 0x00, 0x20, 0x00, 0x20, 0x01, 0x20,
+    0x02, 0xfd, 0x85, 0x02, 0x0b,
+  ]);
+  const UNSUPPORTED = 'This browser cannot run the on-device voice (it lacks WebAssembly relaxed SIMD). Use the server engine instead.';
+
+  // True when this browser can load the on-device voice build.
+  function supported() {
+    return typeof Worker !== 'undefined' && typeof WebAssembly !== 'undefined' && WebAssembly.validate(RELAXED_SIMD_PROBE);
+  }
+
   let worker = null;
   let ready = null; // { sampleRate } once the model is loaded
   let loadPromise = null; // shared by every caller while the model loads
@@ -58,9 +72,12 @@
         if (w) w.resolve({ chunks: w.chunks, sampleRate: ready.sampleRate });
         return;
       }
-      case 'error':
-        failAll(new Error(msg.message || 'The on-device voice failed.'));
+      case 'error': {
+        // A browser without relaxed SIMD fails inside the module, with a "simd" message.
+        const text = /simd/i.test(msg.message || '') ? UNSUPPORTED : (msg.message || 'The on-device voice failed.');
+        failAll(new Error(text));
         return;
+      }
       default:
         // 'progress_done' and 'gen_start' need no action.
     }
@@ -81,6 +98,7 @@
   function load(onProgress) {
     if (onProgress) progressListener = onProgress;
     if (ready) return Promise.resolve(ready);
+    if (!supported()) return Promise.reject(new Error(UNSUPPORTED));
     if (!loadPromise) {
       loadPromise = new Promise((resolve, reject) => {
         loadWaiter = { resolve, reject };
@@ -108,5 +126,5 @@
     });
   }
 
-  window.DeviceTTS = { VOICES, load, generate };
+  window.DeviceTTS = { VOICES, supported, load, generate };
 })();
