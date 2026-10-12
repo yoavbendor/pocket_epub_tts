@@ -1,11 +1,22 @@
-Vendored unmodified from the WebAssembly demo at
-https://laurentmazare.github.io/pocket-tts/ (Pocket TTS by Kyutai, WASM build
-by Laurent Mazare, using the xn library: https://github.com/LaurentMazare/xn).
+Pocket TTS for the browser, WebAssembly build (SIMD128, no relaxed SIMD).
 
-  worker.js          the demo's Web Worker (loads weights from Hugging Face)
-  ptts_wasm.js       wasm-bindgen glue
-  ptts_wasm_bg.wasm  compiled model runtime
+Files
+  worker.js          unmodified worker from the WASM demo at
+                     https://laurentmazare.github.io/pocket-tts/ (loads weights
+                     from Hugging Face and drives the module below)
+  ptts_wasm.js       wasm-bindgen glue, built from wrapper-src/ (this repo)
+  ptts_wasm_bg.wasm  compiled module, built from wrapper-src/ (this repo)
+  wrapper-src/       Rust wrapper that gives the demo's JavaScript API on top
+                     of the ptts crate (crates.io, =0.2.3, MIT OR Apache-2.0),
+                     which is the xn-ptts library by Laurent Mazare
+                     (https://github.com/LaurentMazare/xn-ptts)
 
-The license for these files was NOT verified when they were copied (GitHub was
-not reachable from the build sandbox). Check the upstream repository license
-before publishing this page.
+Why this build: the demo's module uses WebAssembly relaxed-SIMD opcodes, which
+iOS WebKit rejects. This build uses only SIMD128 (see wrapper-src/.cargo/config.toml).
+Check: `wasm-tools validate --features=-relaxed-simd ptts_wasm_bg.wasm` passes.
+
+Rebuild: see BUILD.md.
+
+Licenses: worker.js is from the upstream demo (license not verified: GitHub was
+unreachable from the build sandbox). The ptts crate is MIT OR Apache-2.0. The
+wrapper is ours. Check upstream licenses before publishing this page.

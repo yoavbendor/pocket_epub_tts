@@ -15,18 +15,18 @@
   const QUANT = 'q8'; // ~146 MB download; f32 is ~240 MB
   const TEMPERATURE = 0.7; // the demo's default
 
-  // A 37-byte module whose only instruction is f32x4.relaxed_madd (a relaxed-SIMD opcode).
-  // Browsers without relaxed SIMD, such as iOS WebKit, reject the voice build outright.
-  const RELAXED_SIMD_PROBE = new Uint8Array([
-    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x01, 0x60, 0x03, 0x7b, 0x7b, 0x7b,
-    0x01, 0x7b, 0x03, 0x02, 0x01, 0x00, 0x0a, 0x0d, 0x01, 0x0b, 0x00, 0x20, 0x00, 0x20, 0x01, 0x20,
-    0x02, 0xfd, 0x85, 0x02, 0x0b,
+  // A 34-byte module whose only instruction is f32x4.add (WebAssembly SIMD128). Browsers
+  // without WebAssembly SIMD, such as iOS before 16.4, cannot load the voice build.
+  const SIMD_PROBE = new Uint8Array([
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x07, 0x01, 0x60, 0x02, 0x7b, 0x7b, 0x01,
+    0x7b, 0x03, 0x02, 0x01, 0x00, 0x0a, 0x0b, 0x01, 0x09, 0x00, 0x20, 0x00, 0x20, 0x01, 0xfd, 0xe4,
+    0x01, 0x0b,
   ]);
-  const UNSUPPORTED = 'This browser cannot run the on-device voice (it lacks WebAssembly relaxed SIMD). Use the server engine instead.';
+  const UNSUPPORTED = 'This browser cannot run the on-device voice (it lacks WebAssembly SIMD). Use the server engine instead.';
 
   // True when this browser can load the on-device voice build.
   function supported() {
-    return typeof Worker !== 'undefined' && typeof WebAssembly !== 'undefined' && WebAssembly.validate(RELAXED_SIMD_PROBE);
+    return typeof Worker !== 'undefined' && typeof WebAssembly !== 'undefined' && WebAssembly.validate(SIMD_PROBE);
   }
 
   let worker = null;
@@ -73,7 +73,7 @@
         return;
       }
       case 'error': {
-        // A browser without relaxed SIMD fails inside the module, with a "simd" message.
+        // A browser without WebAssembly SIMD fails inside the module, with a "simd" message.
         const text = /simd/i.test(msg.message || '') ? UNSUPPORTED : (msg.message || 'The on-device voice failed.');
         failAll(new Error(text));
         return;
