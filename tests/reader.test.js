@@ -104,6 +104,22 @@ test('fixWavHeader leaves non-WAV data alone', () => {
   assert.equal(Buffer.from(out).toString(), 'not a wav file at all');
 });
 
+test('encodeWav writes a valid 16-bit mono header and clamped samples', () => {
+  const buf = R.encodeWav([new Float32Array([0, 1, -1]), new Float32Array([0.5, 2])], 24000);
+  const v = Buffer.from(buf);
+  assert.equal(v.toString('ascii', 0, 4), 'RIFF');
+  assert.equal(v.toString('ascii', 8, 12), 'WAVE');
+  assert.equal(v.readUInt16LE(22), 1); // mono
+  assert.equal(v.readUInt32LE(24), 24000); // sample rate
+  assert.equal(v.readUInt16LE(34), 16); // bits per sample
+  assert.equal(v.readUInt32LE(40), 5 * 2); // data bytes
+  assert.equal(v.readUInt32LE(4), v.length - 8); // RIFF size
+  assert.equal(v.readInt16LE(44), 0);
+  assert.equal(v.readInt16LE(46), 32767);
+  assert.equal(v.readInt16LE(48), -32768);
+  assert.equal(v.readInt16LE(52), 32767); // 2 is clamped to 1
+});
+
 test('parseEpub reads the spine in order and skips missing items', async () => {
   const files = {
     'META-INF/container.xml': '<container><rootfile full-path="OEBPS/content.opf"/></container>',

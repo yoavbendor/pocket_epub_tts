@@ -206,56 +206,22 @@
     return new Blob([wav], { type: 'audio/wav' });
   }
 
-  // ---------- On-device engine (pocket-tts-js, vendored under vendor/) ----------
+  // ---------- On-device engine (window.DeviceTTS, see device-tts.js) ----------
 
-  // Language bundle downloaded by the on-device engine.
-  const DEVICE_LANGUAGE = 'english_2026-04';
-  let deviceModule = null;
-  let deviceTts = null;
-  let deviceLoading = null;
-  const deviceVoices = new Map(); // voice name -> reference returned by loadVoice()
-
-  // Loaded on first use, so the server-only path never downloads the engine code.
-  function loadDeviceModule() {
-    deviceModule ||= import('./vendor/pocket-tts-js/index.js');
-    return deviceModule;
-  }
-
-  // Downloads the model once per page load. The worker caches it in Cache Storage afterwards.
+  // Downloads the model once per page load. The worker's weights are fetched from Hugging Face.
   function loadDeviceEngine() {
-    if (deviceTts) return Promise.resolve(deviceTts);
-    if (deviceLoading) return deviceLoading;
-    deviceLoading = (async () => {
-      if (typeof Worker === 'undefined' || typeof WebAssembly === 'undefined') {
-        throw new Error('This browser cannot run the voice on the device. Use the server engine instead.');
-      }
-      const { PocketTTS } = await loadDeviceModule();
-      const tts = new PocketTTS({ language: DEVICE_LANGUAGE, quantized: true, voiceCloning: false });
-      await tts.load((p) => {
-        if (p.total) setStatus(`Downloading ${p.label || 'voice model'}: ${Math.floor((p.loaded / p.total) * 100)}%`);
-        else if (p.status) setStatus(p.status);
-      });
-      deviceTts = tts;
-      return tts;
-    })().catch((err) => {
-      deviceLoading = null;
-      throw err;
+    if (!window.DeviceTTS) throw new Error('The on-device voice did not load. Reload the page, or use the server engine.');
+    return window.DeviceTTS.load((msg) => {
+      if (msg.type === 'progress' && msg.pct >= 0) setStatus(`Downloading ${msg.label}: ${msg.pct}%`);
+      else if (msg.type === 'status') setStatus(msg.message);
     });
-    return deviceLoading;
   }
 
   async function synthesizeOnDevice(text, voice) {
-    const tts = await loadDeviceEngine();
-    let ref = deviceVoices.get(voice);
-    if (!ref) {
-      ref = await tts.loadVoice(voice);
-      deviceVoices.set(voice, ref);
-    }
-    const pcmChunks = [];
-    await tts.generate(text, { voice: ref, onChunk: (pcm) => pcmChunks.push(pcm) });
-    if (!pcmChunks.length) throw new Error('The on-device voice produced no audio for this paragraph.');
-    const { chunksToWavBlob } = await loadDeviceModule();
-    return chunksToWavBlob(pcmChunks, tts.sampleRate);
+    await loadDeviceEngine();
+    const { chunks, sampleRate } = await window.DeviceTTS.generate(text, voice);
+    if (!chunks.length) throw new Error('The on-device voice produced no audio for this paragraph.');
+    return new Blob([R.encodeWav(chunks, sampleRate)], { type: 'audio/wav' });
   }
 
   // `variant` is 'browser:<voice>' or 'server:<voice>', as built by currentVariant().
@@ -667,15 +633,22 @@
     }
   }
 
+  // The on-device build speaks fewer voices than the server, so the list follows the engine.
+  function voicesFor(engine) {
+    return engine === 'browser' && window.DeviceTTS ? window.DeviceTTS.VOICES : VOICES;
+  }
+
   function populateVoices() {
-    for (const name of VOICES) {
+    const list = voicesFor(currentEngine());
+    const keep = els.voice.value || storage.get('pet.voice');
+    els.voice.replaceChildren();
+    for (const name of list) {
       const option = document.createElement('option');
       option.value = name;
       option.textContent = name;
       els.voice.append(option);
     }
-    const saved = storage.get('pet.voice');
-    els.voice.value = VOICES.includes(saved) ? saved : DEFAULT_VOICE;
+    els.voice.value = list.includes(keep) ? keep : DEFAULT_VOICE;
   }
 
   function showEngineFields() {
@@ -699,11 +672,13 @@
   }
 
   function init() {
-    populateVoices();
     const savedEngine = storage.get('pet.engine');
     els.engine.value = savedEngine === 'server' ? 'server' : 'browser';
+    populateVoices();
     els.engine.addEventListener('change', () => {
       storage.set('pet.engine', currentEngine());
+      populateVoices();
+      storage.set('pet.voice', currentVoice());
       showEngineFields();
     });
     els.prepare.addEventListener('click', prepareDevice);

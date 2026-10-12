@@ -1,2 +1,0 @@
-Vendored from pocket-tts-js@0.1.0 (MIT, https://github.com/vlapky/pocket-tts-js).
-Only src/*.js and LICENSE are copied; served as-is so its Web Worker stays same-origin.

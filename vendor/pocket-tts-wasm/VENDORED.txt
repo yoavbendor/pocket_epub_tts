@@ -1,0 +1,11 @@
+Vendored unmodified from the WebAssembly demo at
+https://laurentmazare.github.io/pocket-tts/ (Pocket TTS by Kyutai, WASM build
+by Laurent Mazare, using the xn library: https://github.com/LaurentMazare/xn).
+
+  worker.js          the demo's Web Worker (loads weights from Hugging Face)
+  ptts_wasm.js       wasm-bindgen glue
+  ptts_wasm_bg.wasm  compiled model runtime
+
+The license for these files was NOT verified when they were copied (GitHub was
+not reachable from the build sandbox). Check the upstream repository license
+before publishing this page.

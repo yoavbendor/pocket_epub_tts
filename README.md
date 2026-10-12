@@ -12,10 +12,12 @@ served by GitHub Pages or any static host.
 1. The page parses the EPUB in the browser (reading order from the OPF spine, text from
    the XHTML), and splits the text into paragraphs of up to ~400 characters.
 2. Each paragraph is turned into speech by one of two engines, chosen under **Voice**:
-   - **On this phone (default):** the model runs in the browser with
-     [pocket-tts-js](https://github.com/vlapky/pocket-tts-js) (MIT), a community ONNX port
-     of pocket-tts. No server is needed. The first use downloads the model (roughly 100 MB
-     from Hugging Face) and it is cached afterwards. Its source lives in `vendor/pocket-tts-js/`.
+   - **On this phone (default):** the model runs in the browser as WebAssembly, using the
+     WASM demo build by Laurent Mazare (`vendor/pocket-tts-wasm/`, see its `VENDORED.txt`).
+     No server is needed. The first use downloads about 146 MB of weights from Hugging Face.
+     This build has 7 voices (alba, azelma, cosette, eponine, fantine, javert, marius). It
+     runs single-threaded, and on a 4-core desktop it generated speech at about 0.9x real
+     time, so playback may pause now and then. `device-tts.js` wraps the worker.
    - **My pocket-tts server:** each paragraph is sent to `POST /tts` on your server (the
      setup below).
    The WAV for each paragraph is cached in IndexedDB, keyed by engine and voice, and the next
