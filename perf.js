@@ -28,6 +28,7 @@
     const genAudio = run.gens.reduce((a, g) => a + g.audioSec, 0);
     const genWall = run.gens.reduce((a, g) => a + g.wallSec, 0);
     const stalls = run.waits.filter((w) => w.ms >= 100);
+    const gaps = run.gaps || [];
     return {
       startedAt: new Date(run.startedAt).toISOString(),
       backend: run.info.backend,
@@ -44,9 +45,9 @@
       waits: stalls.length,
       waitSec: round(stalls.reduce((a, w) => a + w.ms, 0) / 1000, 2),
       longestWaitSec: stalls.length ? round(Math.max(...stalls.map((w) => w.ms)) / 1000, 2) : 0,
-      gaps: run.gaps.length,
-      avgGapMs: run.gaps.length ? Math.round(run.gaps.reduce((x, g) => x + g, 0) / run.gaps.length) : 0,
-      longestGapMs: run.gaps.length ? Math.round(Math.max(...run.gaps)) : 0,
+      gaps: gaps.length,
+      avgGapMs: gaps.length ? Math.round(gaps.reduce((x, g) => x + g, 0) / gaps.length) : 0,
+      longestGapMs: gaps.length ? Math.round(Math.max(...gaps)) : 0,
     };
   }
 
