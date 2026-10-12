@@ -327,7 +327,9 @@
     return (err && err.message) || String(err);
   }
 
-  async function startCurrent() {
+  // `buffer` (set when playback starts from a stop) also waits for the next part, so that
+  // the first sentence is not followed by a wait for synthesis.
+  async function startCurrent(buffer = false) {
     const gen = ++state.gen;
     const { book, chunks, index } = state;
     const variant = currentVariant();
@@ -337,6 +339,11 @@
         setStatus(`Loading part ${index + 1} of ${chunks.length}…`);
         const blob = await getChunkBlob(book.id, variant, index, chunks[index], PRIORITY_NOW);
         if (gen !== state.gen) return;
+        if (buffer && index + 1 < chunks.length) {
+          setStatus(`Buffering part ${index + 2} of ${chunks.length}…`);
+          await getChunkBlob(book.id, variant, index + 1, chunks[index + 1], PRIORITY_NOW);
+          if (gen !== state.gen) return;
+        }
         setSource(blob, key);
         state.pendingSeek = state.offset;
       }
@@ -363,6 +370,7 @@
       state.loaded = null;
       audio.src = silentUrl();
       audio.play().catch(() => {});
+      return startCurrent(true);
     }
     return startCurrent();
   }

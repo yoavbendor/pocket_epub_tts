@@ -24,7 +24,7 @@ served by GitHub Pages or any static host.
      setup below).
    Each part is generated as its own WAV, cached in IndexedDB keyed by engine and voice, and
    the next four parts are generated while the current one plays. Playback starts after the
-   first part is ready.
+   first two parts are ready (a short buffer, so waits between parts are rare).
 3. Audio plays through an `<audio>` element. Media Session gives lock-screen Play, Pause,
    Previous and Next.
 4. The book text, reading position and cached audio all live in IndexedDB on the phone.
