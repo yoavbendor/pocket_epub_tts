@@ -171,9 +171,11 @@
     return els.engine.value === 'server' ? 'server' : 'browser';
   }
 
-  // Cached audio depends on both the engine and the voice, so the variant is part of its key.
+  // Cached audio depends on the engine (and, on this phone, the CPU or WebGPU build) and the
+  // voice, so all three are part of its key. Otherwise a WebGPU run plays CPU audio.
   function currentVariant() {
-    return `${currentEngine()}:${currentVoice()}`;
+    const engine = currentEngine() === 'server' ? 'server' : `browser-${window.DeviceTTS.getBackend()}`;
+    return `${engine}:${currentVoice()}`;
   }
 
   function checkServerUrl() {
