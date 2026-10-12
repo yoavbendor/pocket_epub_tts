@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="EPUB TTS">
+  <title>Pocket EPUB TTS</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f6f5f2;
+      --card: #ffffff;
+      --text: #1d1d1f;
+      --muted: #6e6e73;
+      --accent: #2f6fdb;
+      --border: #d8d6d0;
+      --danger: #c0392b;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #1c1c1e;
+        --card: #2c2c2e;
+        --text: #f2f2f7;
+        --muted: #aeaeb2;
+        --accent: #5b9bff;
+        --border: #48484a;
+        --danger: #ff6961;
+      }
+    }
+    :root[data-theme="dark"] {
+      --bg: #1c1c1e;
+      --card: #2c2c2e;
+      --text: #f2f2f7;
+      --muted: #aeaeb2;
+      --accent: #5b9bff;
+      --border: #48484a;
+      --danger: #ff6961;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom);
+      -webkit-text-size-adjust: 100%;
+    }
+    main { max-width: 640px; margin: 0 auto; padding: 16px 0 48px; }
+    h1 { font-size: 1.5rem; margin: 8px 0 16px; }
+    h2 { font-size: 1.1rem; margin: 0 0 12px; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .muted { color: var(--muted); font-size: 0.9rem; margin: 4px 0; overflow-wrap: anywhere; }
+    label { display: block; margin-bottom: 12px; font-size: 0.9rem; color: var(--muted); }
+    input[type="url"], select {
+      display: block;
+      width: 100%;
+      margin-top: 6px;
+      padding: 12px;
+      font: inherit;
+      color: var(--text);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+    button, .button {
+      font: inherit;
+      display: inline-block;
+      padding: 12px 16px;
+      border: 0;
+      border-radius: 10px;
+      background: var(--accent);
+      color: #fff;
+      cursor: pointer;
+      text-align: center;
+    }
+    button.secondary, .button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+    button.danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
+    button.small { padding: 8px 12px; font-size: 0.9rem; }
+    button:disabled { opacity: 0.5; }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .controls { display: grid; grid-template-columns: 1fr 1.6fr 1fr; gap: 8px; margin: 20px 0 12px; }
+    .controls button.big { font-size: 1.2rem; font-weight: 600; padding: 18px 8px; }
+    .list { list-style: none; padding: 0; margin: 12px 0 0; }
+    .list li {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 0;
+      border-top: 1px solid var(--border);
+    }
+    .list li:first-child { border-top: 0; }
+    .list .meta { min-width: 0; }
+    .list .title { font-weight: 600; overflow-wrap: anywhere; }
+    .list .actions { display: flex; gap: 6px; flex-shrink: 0; }
+    .visually-hidden {
+      position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none;
+    }
+    #status { min-height: 1.5em; font-weight: 500; }
+    #current-text { white-space: pre-wrap; font-size: 0.95rem; }
+    details { margin-top: 12px; }
+    summary { color: var(--muted); cursor: pointer; }
+    .error { color: var(--danger); }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Pocket EPUB TTS</h1>
+
+    <section class="card" id="settings-card">
+      <h2>Server</h2>
+      <label>
+        pocket-tts URL (must be https:// when this page is https)
+        <input id="server" type="url" inputmode="url" placeholder="https://tts.example.com" autocapitalize="off" autocorrect="off" spellcheck="false">
+      </label>
+      <label>
+        Voice
+        <select id="voice"></select>
+      </label>
+      <div class="row">
+        <button id="test-server" class="secondary small" type="button">Test server</button>
+        <span id="server-msg" class="muted"></span>
+      </div>
+    </section>
+
+    <section class="card" id="library-card">
+      <h2>Books</h2>
+      <div class="row">
+        <label class="button">
+          Upload EPUB
+          <input id="file" class="visually-hidden" type="file" accept=".epub,application/epub+zip">
+        </label>
+      </div>
+      <p id="import-msg" class="muted"></p>
+      <ul id="book-list" class="list"></ul>
+    </section>
+
+    <section class="card" id="reader-card" hidden>
+      <div class="row">
+        <button id="back" class="secondary small" type="button">← Books</button>
+      </div>
+      <h2 id="title" style="margin-top:12px"></h2>
+      <p id="author" class="muted"></p>
+      <p id="position" class="muted"></p>
+
+      <div class="controls">
+        <button id="prev" class="secondary" type="button">⏮ Prev</button>
+        <button id="toggle" class="big" type="button">▶ Play</button>
+        <button id="next" class="secondary" type="button">Next ⏭</button>
+      </div>
+      <p id="status" role="status" aria-live="polite"></p>
+
+      <details>
+        <summary>Current paragraph text</summary>
+        <p id="current-text"></p>
+      </details>
+    </section>
+  </main>
+
+  <audio id="player" preload="auto"></audio>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.2/jszip.min.js"></script>
+  <script src="reader.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
