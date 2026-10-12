@@ -25,6 +25,10 @@
     engine: $('engine'),
     serverField: $('server-field'),
     prepare: $('prepare'),
+    rate: $('rate'),
+    perfText: $('perf-text'),
+    perfCopy: $('perf-copy'),
+    perfMsg: $('perf-msg'),
     backendField: $('backend-field'),
     backend: $('backend'),
     server: $('server'),
@@ -61,6 +65,7 @@
     pendingSeek: 0,
     silentUrl: null,
     lastSave: 0,
+    soundStarted: false, // first part of the current run is playing
   };
 
   // ---------- Storage (IndexedDB) ----------
@@ -233,9 +238,13 @@
   // Downloads the model once per page load. The worker's weights are fetched from Hugging Face.
   function loadDeviceEngine() {
     if (!window.DeviceTTS) throw new Error('The on-device voice did not load. Reload the page, or use the server engine.');
+    const t = performance.now();
     return window.DeviceTTS.load((msg) => {
       if (msg.type === 'progress' && msg.pct >= 0) setStatus(`Downloading ${msg.label}: ${msg.pct}%`);
       else if (msg.type === 'status') setStatus(msg.message);
+    }).then((ready) => {
+      window.PerfLog.addLoad(performance.now() - t);
+      return ready;
     });
   }
 
@@ -264,12 +273,23 @@
     const job = (async () => {
       const cached = await idbGet('audio', key);
       if (cached) return cached.blob;
-      const blob = await serial(() => synthesize(text, variant), priority);
+      const blob = await serial(async () => {
+        const t = performance.now();
+        const made = await synthesize(text, variant);
+        window.PerfLog.addGeneration(wavSeconds(made), (performance.now() - t) / 1000);
+        return made;
+      }, priority);
       await idbPut('audio', { key, bookId, voice: variant, index, blob });
       return blob;
     })().finally(() => inflight.delete(key));
     inflight.set(key, job);
     return job;
+  }
+
+  // Both engines return 16-bit mono WAV at 24 kHz: 44 header bytes, then 2 bytes per sample.
+  const PCM_RATE = 24000;
+  function wavSeconds(blob) {
+    return Math.max(0, blob.size - 44) / (2 * PCM_RATE);
   }
 
   function prefetch() {
@@ -339,6 +359,7 @@
     try {
       if (state.loaded !== key) {
         setStatus(`Loading part ${index + 1} of ${chunks.length}…`);
+        const waitStart = performance.now();
         const blob = await getChunkBlob(book.id, variant, index, chunks[index], PRIORITY_NOW);
         if (gen !== state.gen) return;
         if (buffer && index + 1 < chunks.length) {
@@ -346,12 +367,19 @@
           await getChunkBlob(book.id, variant, index + 1, chunks[index + 1], PRIORITY_NOW);
           if (gen !== state.gen) return;
         }
+        if (state.soundStarted) window.PerfLog.addWait(performance.now() - waitStart);
         setSource(blob, key);
+        audio.playbackRate = currentRate();
+        audio.preservesPitch = true;
         state.pendingSeek = state.offset;
       }
       await audio.play();
       if (gen !== state.gen) return;
       setStatus('Playing');
+      if (!state.soundStarted) {
+        state.soundStarted = true;
+        window.PerfLog.markFirstSound();
+      }
     } catch (err) {
       if (gen !== state.gen) return;
       state.playing = false;
@@ -362,8 +390,28 @@
     prefetch();
   }
 
+  function currentRate() {
+    return parseFloat(els.rate.value) || 1;
+  }
+
+  // A run is one listening session: from Play until Pause or the end of the book.
+  function startRun() {
+    state.soundStarted = false;
+    window.PerfLog.start({
+      backend: currentEngine() === 'server' ? 'server' : window.DeviceTTS.getBackend(),
+      voice: currentVoice(),
+      rate: currentRate(),
+    });
+  }
+
+  function finishRun() {
+    window.PerfLog.stop();
+    renderPerf();
+  }
+
   function play() {
     if (!state.book) return;
+    if (!state.playing) startRun();
     state.playing = true;
     render();
     if (state.loaded !== chunkKey(state.book.id, currentVariant(), state.index)) {
@@ -384,6 +432,7 @@
     setStatus('Paused');
     render();
     saveProgress();
+    finishRun();
   }
 
   function jump(delta) {
@@ -424,6 +473,7 @@
       setStatus('Finished. Tap Play to read it again.');
       render();
       saveProgress();
+      finishRun();
       return;
     }
     state.index++;
@@ -442,6 +492,7 @@
     setStatus('Paused');
     render();
     saveProgress();
+    finishRun();
   });
 
   function setupMediaSession() {
@@ -510,6 +561,30 @@
     updateMediaSession();
   }
 
+  function renderPerf() {
+    const runs = window.PerfLog.runs();
+    els.perfText.textContent = runs.length
+      ? runs.slice(0, 5).map(window.PerfLog.format).join('\n\n')
+      : 'No runs yet. Listen for a while, then pause to see the numbers here.';
+    els.perfCopy.disabled = runs.length === 0;
+    els.perfMsg.textContent = '';
+  }
+
+  async function copyPerf() {
+    const text = els.perfText.textContent;
+    try {
+      await navigator.clipboard.writeText(text);
+      els.perfMsg.textContent = 'Copied.';
+    } catch (_) {
+      const range = document.createRange();
+      range.selectNodeContents(els.perfText);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      els.perfMsg.textContent = 'Press and hold the text to copy.';
+    }
+  }
+
   function showLibrary() {
     state.gen++;
     els.reader.hidden = true;
@@ -549,12 +624,14 @@
     els.library.hidden = true;
     els.settings.hidden = true;
     els.reader.hidden = false;
+    renderPerf();
     setStatus(state.index || state.offset ? 'Ready. Tap Play to continue where you stopped.' : 'Ready. Tap Play to start.');
     render();
   }
 
   async function closeReader() {
     if (state.book) {
+      if (state.playing) finishRun();
       state.gen++;
       state.playing = false;
       audio.pause();
@@ -763,6 +840,13 @@
     });
 
     els.toggle.addEventListener('click', () => (state.playing ? pause() : play()));
+    els.rate.value = ['1', '1.05', '1.1', '1.15', '1.2'].includes(storage.get('pet.rate')) ? storage.get('pet.rate') : '1';
+    els.rate.addEventListener('change', () => {
+      storage.set('pet.rate', els.rate.value);
+      audio.playbackRate = currentRate();
+      audio.preservesPitch = true;
+    });
+    els.perfCopy.addEventListener('click', copyPerf);
     els.prev.addEventListener('click', () => jump(-1));
     els.next.addEventListener('click', () => jump(1));
     els.back.addEventListener('click', closeReader);

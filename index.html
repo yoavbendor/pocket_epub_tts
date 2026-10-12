@@ -106,6 +106,9 @@
     }
     #status { min-height: 1.5em; font-weight: 500; }
     #current-text { white-space: pre-wrap; font-size: 0.95rem; }
+    .speed { margin-top: 12px; }
+    .speed select { width: auto; min-width: 8em; }
+    .perf { white-space: pre-wrap; font: 0.8rem/1.4 ui-monospace, Menlo, monospace; overflow-x: auto; color: var(--muted); }
     details { margin-top: 12px; }
     summary { color: var(--muted); cursor: pointer; }
     .error { color: var(--danger); }
@@ -177,6 +180,26 @@
       </div>
       <p id="status" role="status" aria-live="polite"></p>
 
+      <label class="speed">
+        Playback speed
+        <select id="rate">
+          <option value="1">1.00x</option>
+          <option value="1.05">1.05x</option>
+          <option value="1.1">1.10x</option>
+          <option value="1.15">1.15x</option>
+          <option value="1.2">1.20x</option>
+        </select>
+      </label>
+
+      <details id="perf" open>
+        <summary>Performance (recent listening runs)</summary>
+        <pre id="perf-text" class="perf">No runs yet. Listen for a while, then pause to see the numbers here.</pre>
+        <div class="row">
+          <button id="perf-copy" class="secondary small" type="button" disabled>Copy numbers</button>
+          <span id="perf-msg" class="muted"></span>
+        </div>
+      </details>
+
       <details>
         <summary>Current paragraph text</summary>
         <p id="current-text"></p>
@@ -189,6 +212,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.2/jszip.min.js"></script>
   <script src="reader.js"></script>
   <script src="device-tts.js"></script>
+  <script src="perf.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

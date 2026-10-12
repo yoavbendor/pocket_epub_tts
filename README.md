@@ -98,6 +98,17 @@ root folder). The page is then at `https://<user>.github.io/<repo>/`.
 - Only the English voices from the pocket-tts README are offered. Other languages would need
   their own model (`pocket-tts serve --language …` on the server) and a different voice list.
 
+
+## Comparing speed and settings
+
+- **Performance** (under the player): each listening run, from Play to Pause or the end of
+  the book, is summarised: first sound, model load, generation speed as a multiple of real
+  time, and waits during playback. The last runs are kept on the phone. **Copy numbers**
+  puts them on the clipboard.
+- **Playback speed** (1.00x to 1.20x) speeds up the audio only. Generation is not faster, so
+  a higher speed uses audio faster than it is made. The waits in the summary show whether a
+  speed holds up on your phone.
+
 ## Files
 
 | File | Purpose |
