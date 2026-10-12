@@ -6,6 +6,7 @@
 //   addGeneration(audioSec, wallSec)   one part synthesised
 //   addWait(ms)         time spent waiting for a part during playback
 //   addLoad(ms)         time spent loading the voice model during the run
+//   addGap(ms)          time between one part ending and the next starting
 //   markFirstSound()     call once, when the first part starts playing
 //   stop() -> summary    end the run, save it, return the summary (or null)
 //   runs() -> summary[]  saved runs, newest first
@@ -43,6 +44,9 @@
       waits: stalls.length,
       waitSec: round(stalls.reduce((a, w) => a + w.ms, 0) / 1000, 2),
       longestWaitSec: stalls.length ? round(Math.max(...stalls.map((w) => w.ms)) / 1000, 2) : 0,
+      gaps: run.gaps.length,
+      avgGapMs: run.gaps.length ? Math.round(run.gaps.reduce((x, g) => x + g, 0) / run.gaps.length) : 0,
+      longestGapMs: run.gaps.length ? Math.round(Math.max(...run.gaps)) : 0,
     };
   }
 
@@ -59,6 +63,7 @@
         (s.loadSec ? ` (model load ${s.loadSec}s included)` : ''),
       `  parts ${s.parts}, generated ${s.generatedSec}s of audio; generation ${s.generationRtf == null ? '-' : s.generationRtf + 'x'} (audio made per second of synthesis, not affected by playback speed; playback stays smooth while it is above your speed)`,
       `  waits during playback: ${s.waits} (total ${s.waitSec}s, longest ${s.longestWaitSec}s)`,
+      `  gaps between parts: ${s.gaps} (average ${s.avgGapMs}ms, longest ${s.longestGapMs}ms)`,
     ];
     if (s.device) lines.push(`  device: ${s.device}`);
     return lines.join('\n');
@@ -87,6 +92,7 @@
       info: { ...info, device: deviceText() },
       gens: [],
       waits: [],
+      gaps: [],
       firstSoundMs: null,
     };
   }
@@ -99,6 +105,10 @@
 
   function addGeneration(audioSec, wallSec) {
     if (current) current.gens.push({ audioSec, wallSec });
+  }
+
+  function addGap(ms) {
+    if (current) current.gaps.push(ms);
   }
 
   function addLoad(ms) {
@@ -128,5 +138,5 @@
     return load();
   }
 
-  return { start, addGeneration, addWait, addLoad, markFirstSound, stop, runs, format, summarize };
+  return { start, addGeneration, addWait, addGap, addLoad, markFirstSound, stop, runs, format, summarize };
 });

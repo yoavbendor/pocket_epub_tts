@@ -51,7 +51,25 @@
     currentText: $('current-text'),
     audio: $('player'),
   };
-  const audio = els.audio;
+  // Two elements alternate. The active one plays; the spare holds the next part, loaded, so the
+  // switch at the end of a part has no gap. Handlers only act for the active element.
+  const elementA = els.audio;
+  const elementB = new Audio();
+  elementB.preload = 'auto';
+  let audio = elementA;
+  let spare = elementB;
+  let gapStart = null; // when the previous part ended, while the next one is still starting
+  let preloaded = null; // { key, url } of the part waiting in the spare element
+  let preloadToken = 0;
+
+  // Attaches a handler to both elements; it runs only when the event is from the active one.
+  function onEach(type, handler) {
+    for (const el of [elementA, elementB]) {
+      el.addEventListener(type, (e) => {
+        if (e.currentTarget === audio) handler(e);
+      });
+    }
+  }
 
   const state = {
     book: null, // metadata record of the open book
@@ -391,6 +409,7 @@
         state.soundStarted = true;
         window.PerfLog.markFirstSound();
       }
+      preloadNext();
     } catch (err) {
       if (gen !== state.gen) return;
       state.playing = false;
@@ -434,6 +453,8 @@
       state.loaded = null;
       audio.src = silentUrl();
       audio.play().catch(() => {});
+      spare.src = silentUrl();
+      spare.play().catch(() => {});
       return startCurrent(true);
     }
     return startCurrent();
@@ -442,6 +463,7 @@
   function pause() {
     state.gen++;
     state.playing = false;
+    gapStart = null;
     audio.pause();
     setStatus('Paused');
     render();
@@ -464,20 +486,65 @@
     setStatus('Paused');
   }
 
-  audio.addEventListener('loadedmetadata', () => {
+  // Loads the part after the current one into the spare element.
+  function preloadNext() {
+    const { book, chunks, index } = state;
+    if (!book || index + 1 >= chunks.length) return;
+    const variant = currentVariant();
+    const next = index + 1;
+    const key = chunkKey(book.id, variant, next);
+    const token = ++preloadToken;
+    getChunkBlob(book.id, variant, next, chunks[next], PRIORITY_NOW)
+      .then((blob) => {
+        if (token !== preloadToken) return; // a jump or a new part superseded this one
+        if (preloaded) URL.revokeObjectURL(preloaded.url);
+        const url = URL.createObjectURL(blob);
+        preloaded = { key, url };
+        spare.src = url;
+        spare.load();
+      })
+      .catch(() => {});
+  }
+
+  // Starts the preloaded part on the spare element. Returns false when it is not ready.
+  function swapToPreloaded() {
+    if (!state.book) return false;
+    const want = chunkKey(state.book.id, currentVariant(), state.index);
+    if (!preloaded || preloaded.key !== want) return false;
+    const old = state.objectUrl;
+    [audio, spare] = [spare, audio];
+    state.objectUrl = preloaded.url;
+    state.loaded = want;
+    preloaded = null;
+    if (old) URL.revokeObjectURL(old);
+    audio.playbackRate = currentRate();
+    audio.preservesPitch = true;
+    audio.currentTime = 0;
+    audio.play().then(() => setStatus('Playing')).catch((err) => {
+      if (!state.playing) return;
+      state.playing = false;
+      setStatus(describeError(err), true);
+      render();
+    });
+    preloadNext();
+    prefetch();
+    return true;
+  }
+
+  onEach('loadedmetadata', () => {
     if (!isCurrentSource() || !state.pendingSeek) return;
     if (isFinite(audio.duration)) audio.currentTime = Math.min(state.pendingSeek, audio.duration - 0.5);
     state.offset = audio.currentTime;
     state.pendingSeek = 0;
   });
 
-  audio.addEventListener('timeupdate', () => {
+  onEach('timeupdate', () => {
     if (!isCurrentSource()) return;
     state.offset = audio.currentTime;
     if (Date.now() - state.lastSave > 5000) saveProgress();
   });
 
-  audio.addEventListener('ended', () => {
+  onEach('ended', () => {
     if (!state.playing || !isCurrentSource()) return;
     if (state.index + 1 >= state.chunks.length) {
       // Finished: the next Play starts the book again.
@@ -494,11 +561,19 @@
     state.offset = 0;
     saveProgress();
     render();
-    startCurrent();
+    gapStart = performance.now();
+    if (!swapToPreloaded()) startCurrent();
+  });
+
+  // The next part has started: record how long the switch took.
+  onEach('playing', () => {
+    if (gapStart === null) return;
+    window.PerfLog.addGap(performance.now() - gapStart);
+    gapStart = null;
   });
 
   // The system paused us (phone call, Siri, lock screen). Keep the UI honest.
-  audio.addEventListener('pause', () => {
+  onEach('pause', () => {
     const atEnd = audio.ended || (isFinite(audio.duration) && audio.currentTime >= audio.duration - 0.05);
     if (!state.playing || !isCurrentSource() || atEnd) return;
     state.gen++;
