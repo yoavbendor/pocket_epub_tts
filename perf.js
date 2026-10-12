@@ -57,7 +57,7 @@
       `${s.startedAt.slice(0, 16).replace('T', ' ')}  ${s.backend}  ${s.voice}  speed ${s.rate}x`,
       `  listened ${s.wallSec}s, first sound after ${s.firstSoundSec == null ? '-' : s.firstSoundSec + 's'}` +
         (s.loadSec ? ` (model load ${s.loadSec}s included)` : ''),
-      `  parts ${s.parts}, generated ${s.generatedSec}s of audio, generation ${s.generationRtf == null ? '-' : s.generationRtf + 'x'} real time`,
+      `  parts ${s.parts}, generated ${s.generatedSec}s of audio; generation ${s.generationRtf == null ? '-' : s.generationRtf + 'x'} (audio made per second of synthesis, not affected by playback speed; playback stays smooth while it is above your speed)`,
       `  waits during playback: ${s.waits} (total ${s.waitSec}s, longest ${s.longestWaitSec}s)`,
     ];
     if (s.device) lines.push(`  device: ${s.device}`);

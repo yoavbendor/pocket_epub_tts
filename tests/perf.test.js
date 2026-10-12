@@ -34,5 +34,5 @@ test('format produces the lines a person can paste back', () => {
   const text = P.format(P.summarize({ startedAt: 0, endedAt: 1000, info: { backend: 'cpu', voice: 'alba', rate: 1.05 }, gens: [{ audioSec: 2, wallSec: 1 }], waits: [], firstSoundMs: 500 }));
   assert.match(text, /cpu\s+alba\s+speed 1.05x/);
   assert.match(text, /first sound after 0.5s/);
-  assert.match(text, /generation 2x real time/);
+  assert.match(text, /generation 2x \(audio made per second of synthesis/);
 });
