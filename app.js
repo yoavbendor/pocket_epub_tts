@@ -278,7 +278,10 @@
       const blob = await serial(async () => {
         const t = performance.now();
         const made = await synthesize(text, variant);
-        window.PerfLog.addGeneration(wavSeconds(made), (performance.now() - t) / 1000);
+        const wall = (performance.now() - t) / 1000;
+        const sec = wavSeconds(made);
+        window.PerfLog.addGeneration(sec, wall);
+        if (wall > 0) lastGenRtf = sec / wall;
         return made;
       }, priority);
       await idbPut('audio', { key, bookId, voice: variant, index, blob });
@@ -287,6 +290,11 @@
     inflight.set(key, job);
     return job;
   }
+
+  // Speed of the most recent generation, in audio seconds per second of synthesis. Used to
+  // decide whether playback can start after one part instead of two.
+  let lastGenRtf = null;
+  const FAST_RTF = 1.5;
 
   // Both engines return 16-bit mono WAV at 24 kHz: 44 header bytes, then 2 bytes per sample.
   const PCM_RATE = 24000;
@@ -364,7 +372,8 @@
         const waitStart = performance.now();
         const blob = await getChunkBlob(book.id, variant, index, chunks[index], PRIORITY_NOW);
         if (gen !== state.gen) return;
-        if (buffer && index + 1 < chunks.length) {
+        const fast = lastGenRtf !== null && lastGenRtf >= FAST_RTF;
+        if (buffer && index + 1 < chunks.length && !fast) {
           setStatus(`Buffering part ${index + 2} of ${chunks.length}…`);
           await getChunkBlob(book.id, variant, index + 1, chunks[index + 1], PRIORITY_NOW);
           if (gen !== state.gen) return;
@@ -392,6 +401,8 @@
     prefetch();
   }
 
+  const RATES = ['1', '1.05', '1.1', '1.15', '1.2', '1.25', '1.3'];
+
   function currentRate() {
     return parseFloat(els.rate.value) || 1;
   }
@@ -407,7 +418,8 @@
   }
 
   function finishRun() {
-    window.PerfLog.stop();
+    const summary = window.PerfLog.stop();
+    if (summary) sessionRuns.unshift(summary);
     renderPerf();
   }
 
@@ -563,12 +575,14 @@
     updateMediaSession();
   }
 
+  // Runs from this page visit only: the panel starts empty each time the page opens.
+  const sessionRuns = [];
+
   function renderPerf() {
-    const runs = window.PerfLog.runs();
-    els.perfText.textContent = runs.length
-      ? runs.slice(0, 5).map(window.PerfLog.format).join('\n\n')
+    els.perfText.textContent = sessionRuns.length
+      ? sessionRuns.slice(0, 5).map(window.PerfLog.format).join('\n\n')
       : 'No runs yet. Listen for a while, then pause to see the numbers here.';
-    els.perfCopy.disabled = runs.length === 0;
+    els.perfCopy.disabled = sessionRuns.length === 0;
     els.perfMsg.textContent = '';
   }
 
@@ -842,7 +856,7 @@
     });
 
     els.toggle.addEventListener('click', () => (state.playing ? pause() : play()));
-    els.rate.value = ['1', '1.05', '1.1', '1.15', '1.2'].includes(storage.get('pet.rate')) ? storage.get('pet.rate') : '1';
+    els.rate.value = RATES.includes(storage.get('pet.rate')) ? storage.get('pet.rate') : '1';
     els.rate.addEventListener('change', () => {
       storage.set('pet.rate', els.rate.value);
       audio.playbackRate = currentRate();

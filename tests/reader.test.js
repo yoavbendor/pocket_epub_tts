@@ -51,6 +51,13 @@ test('sentencesOf splits on sentence ends and cuts overlong sentences at spaces'
   assert.equal(pieces.join(' '), long);
 });
 
+test('sentencesOf breaks long sentences at commas before falling back to spaces', () => {
+  const pieces = R.sentencesOf('When the rain finally stopped, the village came out, blinking, into the square and talked for hours', 40);
+  assert.ok(pieces.every((p) => p.length <= 40), JSON.stringify(pieces));
+  assert.equal(pieces[0], 'When the rain finally stopped,');
+  assert.equal(pieces[1], 'the village came out, blinking,');
+});
+
 test('chunkText keeps every chunk within the limit and loses no words', () => {
   const paragraphs = [
     'Short intro.',

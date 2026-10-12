@@ -11,7 +11,7 @@
   // Chunk size in characters, about one or two sentences. Bump CHUNK_VERSION when the
   // chunking changes, so books stored with the old chunks are re-split on open.
   const CHUNK_CHARS = 160;
-  const CHUNK_VERSION = 2;
+  const CHUNK_VERSION = 3;
 
   const NAMED_ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
 
@@ -140,8 +140,13 @@
     for (const m of text.matchAll(/[^.!?…]*[.!?…]+["'”’)\]]*|[^.!?…]+$/g)) {
       let s = m[0].trim();
       while (s.length > maxLen) {
-        const cut = s.lastIndexOf(' ', maxLen);
-        const at = cut > 0 ? cut : maxLen;
+        // Prefer a clause break (comma, semicolon, colon, dash) that keeps at least 40%
+        // of the limit; otherwise break at a space. Never cut inside a word if avoidable.
+        const head = s.slice(0, maxLen + 1);
+        const clause = Math.max(head.lastIndexOf(', '), head.lastIndexOf('; '), head.lastIndexOf(': '), head.lastIndexOf(' — '));
+        const clauseCut = clause >= maxLen * 0.4 ? clause + 1 : -1;
+        const spaceCut = head.lastIndexOf(' ');
+        const at = clauseCut > 0 ? clauseCut : spaceCut > 0 ? spaceCut : maxLen;
         out.push(s.slice(0, at).trim());
         s = s.slice(at).trim();
       }
