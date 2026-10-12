@@ -10,7 +10,8 @@ served by GitHub Pages or any static host.
 ## How it works
 
 1. The page parses the EPUB in the browser (reading order from the OPF spine, text from
-   the XHTML), and splits the text into paragraphs of up to ~400 characters.
+   the XHTML), and splits the text into parts of up to 160 characters (about one or two
+   sentences).
 2. Each paragraph is turned into speech by one of two engines, chosen under **Voice**:
    - **On this phone (default):** the model runs in the browser as WebAssembly with SIMD128
      (no relaxed SIMD, so iOS 16.4 and later can load it). The module is built from
@@ -21,8 +22,9 @@ served by GitHub Pages or any static host.
      at about 1.1x real time. Phones have not been measured. `device-tts.js` wraps the worker.
    - **My pocket-tts server:** each paragraph is sent to `POST /tts` on your server (the
      setup below).
-   The WAV for each paragraph is cached in IndexedDB, keyed by engine and voice, and the next
-   four paragraphs are generated ahead of time.
+   Each part is generated as its own WAV, cached in IndexedDB keyed by engine and voice, and
+   the next four parts are generated while the current one plays. Playback starts after the
+   first part is ready.
 3. Audio plays through an `<audio>` element. Media Session gives lock-screen Play, Pause,
    Previous and Next.
 4. The book text, reading position and cached audio all live in IndexedDB on the phone.

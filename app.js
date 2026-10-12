@@ -10,7 +10,7 @@
 
   const R = window.PocketReader;
   const DB_NAME = 'pocket-epub-tts';
-  const LOOKAHEAD = 4; // paragraphs generated ahead of the one playing
+  const LOOKAHEAD = 4; // parts generated ahead of the one playing
   const DEFAULT_VOICE = 'alba';
   // Built-in English voices from the pocket-tts README.
   const VOICES = [
@@ -186,12 +186,32 @@
 
   // ---------- Synthesis ----------
 
-  // Requests are sent one at a time: pocket-tts runs one model on a small CPU.
-  let queue = Promise.resolve();
-  function serial(task) {
-    const run = queue.then(() => task());
-    queue = run.catch(() => {});
-    return run;
+  // Synthesis runs one request at a time (the model is single-threaded). Higher priority
+  // jumps the line: the part being played outranks lookahead, so a jump or a stall never
+  // waits behind audio that is only prefetched.
+  const PRIORITY_NOW = 2;
+  const PRIORITY_AHEAD = 1;
+  const jobs = [];
+  let pumping = false;
+  function serial(task, priority = PRIORITY_AHEAD) {
+    return new Promise((resolve, reject) => {
+      jobs.push({ task, priority, resolve, reject });
+      jobs.sort((a, b) => b.priority - a.priority);
+      pump();
+    });
+  }
+  async function pump() {
+    if (pumping) return;
+    pumping = true;
+    while (jobs.length) {
+      const job = jobs.shift();
+      try {
+        job.resolve(await job.task());
+      } catch (err) {
+        job.reject(err);
+      }
+    }
+    pumping = false;
   }
 
   async function synthesizeOnServer(text, voice) {
@@ -220,7 +240,7 @@
   async function synthesizeOnDevice(text, voice) {
     await loadDeviceEngine();
     const { chunks, sampleRate } = await window.DeviceTTS.generate(text, voice);
-    if (!chunks.length) throw new Error('The on-device voice produced no audio for this paragraph.');
+    if (!chunks.length) throw new Error('The on-device voice produced no audio for this part.');
     return new Blob([R.encodeWav(chunks, sampleRate)], { type: 'audio/wav' });
   }
 
@@ -236,13 +256,13 @@
   const chunkKey = (bookId, variant, index) => `${bookId}|${variant}|${index}`;
 
   // Returns the WAV for one paragraph, from the IndexedDB cache when possible.
-  function getChunkBlob(bookId, variant, index, text) {
+  function getChunkBlob(bookId, variant, index, text, priority = PRIORITY_AHEAD) {
     const key = chunkKey(bookId, variant, index);
     if (inflight.has(key)) return inflight.get(key);
     const job = (async () => {
       const cached = await idbGet('audio', key);
       if (cached) return cached.blob;
-      const blob = await serial(() => synthesize(text, variant));
+      const blob = await serial(() => synthesize(text, variant), priority);
       await idbPut('audio', { key, bookId, voice: variant, index, blob });
       return blob;
     })().finally(() => inflight.delete(key));
@@ -314,8 +334,8 @@
     const key = chunkKey(book.id, variant, index);
     try {
       if (state.loaded !== key) {
-        setStatus(`Loading paragraph ${index + 1} of ${chunks.length}…`);
-        const blob = await getChunkBlob(book.id, variant, index, chunks[index]);
+        setStatus(`Loading part ${index + 1} of ${chunks.length}…`);
+        const blob = await getChunkBlob(book.id, variant, index, chunks[index], PRIORITY_NOW);
         if (gen !== state.gen) return;
         setSource(blob, key);
         state.pendingSeek = state.offset;
@@ -438,7 +458,7 @@
     navigator.mediaSession.metadata = new MediaMetadata({
       title: state.book.title,
       artist: state.book.author || 'Pocket EPUB TTS',
-      album: `Paragraph ${state.index + 1} of ${state.chunks.length}`,
+      album: `Part ${state.index + 1} of ${state.chunks.length}`,
     });
   }
 
@@ -474,7 +494,7 @@
       els.title.textContent = book.title;
       els.author.textContent = book.author || '';
       els.position.textContent =
-        `Paragraph ${state.index + 1} of ${state.chunks.length} · ${Math.floor(((state.index + 1) / state.chunks.length) * 100)}%`;
+        `Part ${state.index + 1} of ${state.chunks.length} · ${Math.floor(((state.index + 1) / state.chunks.length) * 100)}%`;
       els.currentText.textContent = state.chunks[state.index];
     }
     updateMediaSession();
@@ -489,9 +509,27 @@
   }
 
   async function showReader(id) {
-    const meta = await idbGet('books', id);
-    const data = await idbGet('chunks', id);
+    let meta = await idbGet('books', id);
+    let data = await idbGet('chunks', id);
     if (!meta || !data) throw new Error('That book is no longer stored on this device.');
+    if (meta.chunkVersion !== R.CHUNK_VERSION) {
+      // Older books were split into longer parts. Re-split them, keep the place roughly
+      // where it was, and drop audio cut for the old parts.
+      const paragraphs = data.paragraphs || data.chunks;
+      const chunks = R.chunkText(paragraphs);
+      const fraction = meta.position / Math.max(meta.count, 1);
+      meta = {
+        ...meta,
+        count: chunks.length,
+        position: Math.min(Math.floor(fraction * chunks.length), chunks.length - 1),
+        offset: 0,
+        chunkVersion: R.CHUNK_VERSION,
+      };
+      data = { id, paragraphs, chunks };
+      await idbPut('chunks', data);
+      await idbPut('books', meta);
+      await evictAudio(id, '', Infinity);
+    }
     state.book = meta;
     state.chunks = data.chunks;
     state.index = Math.min(meta.position, data.chunks.length - 1);
@@ -543,7 +581,7 @@
       title.textContent = book.title;
       const detail = document.createElement('div');
       detail.className = 'muted';
-      detail.textContent = `${percent(book)}% · paragraph ${book.position + 1} of ${book.count}`;
+      detail.textContent = `${percent(book)}% · part ${book.position + 1} of ${book.count}`;
       meta.append(title, detail);
 
       const actions = document.createElement('div');
@@ -601,7 +639,7 @@
     const epub = await R.parseEpub(readText, window.DOMParser);
     if (!epub.chunks.length) throw new Error('No readable text found in this EPUB.');
     const id = newId();
-    await idbPut('chunks', { id, chunks: epub.chunks });
+    await idbPut('chunks', { id, paragraphs: epub.paragraphs, chunks: epub.chunks });
     await idbPut('books', {
       id,
       title: epub.title || file.name.replace(/\.epub$/i, ''),
@@ -609,6 +647,7 @@
       count: epub.chunks.length,
       position: 0,
       offset: 0,
+      chunkVersion: R.CHUNK_VERSION,
       updatedAt: Date.now(),
     });
     els.importMsg.textContent = '';

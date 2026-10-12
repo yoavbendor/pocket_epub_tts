@@ -8,6 +8,11 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 
+  // Chunk size in characters, about one or two sentences. Bump CHUNK_VERSION when the
+  // chunking changes, so books stored with the old chunks are re-split on open.
+  const CHUNK_CHARS = 160;
+  const CHUNK_VERSION = 2;
+
   const NAMED_ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
 
   function decodeEntities(text) {
@@ -146,8 +151,8 @@
   }
 
   // Groups sentences into chunks of at most maxLen characters. Each chunk is one
-  // TTS request, so the size trades off latency against request overhead.
-  function chunkText(paragraphs, maxLen = 400) {
+  // TTS request: smaller chunks mean the first sound comes sooner.
+  function chunkText(paragraphs, maxLen = CHUNK_CHARS) {
     const chunks = [];
     let current = '';
     for (const paragraph of paragraphs) {
@@ -241,6 +246,8 @@
     paragraphsFromXhtml,
     sentencesOf,
     chunkText,
+    CHUNK_CHARS,
+    CHUNK_VERSION,
     fixWavHeader,
     encodeWav,
     parseEpub,
