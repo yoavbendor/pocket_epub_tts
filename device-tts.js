@@ -18,7 +18,8 @@
   // Voices that the vendored worker loads (its VOICE_NAMES list).
   const VOICES = ['alba', 'azelma', 'cosette', 'eponine', 'fantine', 'javert', 'marius'];
   const QUANT = 'q8'; // ~146 MB download; f32 is ~240 MB
-  const TEMPERATURE = 0.7; // the demo's default
+  // Sampling temperature: lower is steadier, higher is more expressive. The demo uses 0.7.
+  let temperature = 0.7;
 
   // A 34-byte module whose only instruction is f32x4.add (WebAssembly SIMD128). Browsers
   // without WebAssembly SIMD, such as iOS before 16.4, cannot load the voice build.
@@ -127,7 +128,7 @@
     if (genWaiter) return Promise.reject(new Error('The on-device voice is busy with another paragraph.'));
     return new Promise((resolve, reject) => {
       genWaiter = { chunks: [], resolve, reject };
-      worker.postMessage({ type: 'generate', text, voiceName: voice, temperature: TEMPERATURE });
+      worker.postMessage({ type: 'generate', text, voiceName: voice, temperature });
     });
   }
 
@@ -147,5 +148,13 @@
     return typeof navigator !== 'undefined' && Boolean(navigator.gpu);
   }
 
-  window.DeviceTTS = { VOICES, supported, load, generate, setBackend, gpuAvailable, getBackend: () => backend };
+  function setTemperature(t) {
+    const v = Number(t);
+    if (v >= 0.1 && v <= 1) temperature = v;
+  }
+
+  window.DeviceTTS = {
+    VOICES, supported, load, generate, setBackend, gpuAvailable,
+    setTemperature, getTemperature: () => temperature, getBackend: () => backend,
+  };
 })();

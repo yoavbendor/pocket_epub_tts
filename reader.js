@@ -11,7 +11,7 @@
   // Chunk size in characters, about one or two sentences. Bump CHUNK_VERSION when the
   // chunking changes, so books stored with the old chunks are re-split on open.
   const CHUNK_CHARS = 160;
-  const CHUNK_VERSION = 3;
+  const CHUNK_VERSION = 4;
 
   const NAMED_ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
 
@@ -157,10 +157,22 @@
 
   // Groups sentences into chunks of at most maxLen characters. Each chunk is one
   // TTS request: smaller chunks mean the first sound comes sooner.
+  // Makes text easier for the voice: quote marks are dropped (the model reads them as odd
+  // emphasis), curly apostrophes become plain ones, and dashes become a short pause.
+  function normalizeText(text) {
+    return text
+      .replace(/["\u201C\u201D\u201E\u00AB\u00BB]/g, '')
+      .replace(/[\u2018\u2019\u201A]/g, "'")
+      .replace(/\s*[\u2014\u2013]\s*/g, ', ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
   function chunkText(paragraphs, maxLen = CHUNK_CHARS) {
     const chunks = [];
     let current = '';
-    for (const paragraph of paragraphs) {
+    for (const raw of paragraphs) {
+      const paragraph = normalizeText(raw);
       for (const sentence of sentencesOf(paragraph, maxLen)) {
         if (current && current.length + 1 + sentence.length > maxLen) {
           chunks.push(current);
@@ -251,6 +263,7 @@
     paragraphsFromXhtml,
     sentencesOf,
     chunkText,
+    normalizeText,
     CHUNK_CHARS,
     CHUNK_VERSION,
     fixWavHeader,

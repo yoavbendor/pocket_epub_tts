@@ -58,6 +58,11 @@ test('sentencesOf breaks long sentences at commas before falling back to spaces'
   assert.equal(pieces[1], 'the village came out, blinking,');
 });
 
+test('normalizeText drops quote marks and turns dashes into pauses', () => {
+  assert.equal(R.normalizeText('\u201CHello,\u201D she said \u2014 softly.'), 'Hello, she said, softly.');
+  assert.equal(R.normalizeText('It\u2019s "fine" \u2013 really'), "It's fine, really");
+});
+
 test('chunkText keeps every chunk within the limit and loses no words', () => {
   const paragraphs = [
     'Short intro.',

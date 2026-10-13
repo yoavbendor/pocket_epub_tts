@@ -95,6 +95,12 @@ root folder). The page is then at `https://<user>.github.io/<repo>/`.
   book and its audio.
 - **EPUB support**: text in the spine is read in order. Images, footnote popups and
   DRM-protected books are not handled. Some EPUB 2 quirks may affect the title or author.
+- **Expressiveness** (on-device only) sets the sampling temperature: 0.3 is steadier, 1.0 is
+  more varied in pitch and emphasis. Default 0.7. Changing it takes effect on the next part,
+  and each setting is cached separately.
+- **Text clean-up** before speech: quote marks are dropped (they made the voice emphasise
+  quoted words), curly apostrophes become plain ones, and dashes become a short pause. Books
+  stored before this change are re-split when opened.
 - Only the English voices from the pocket-tts README are offered. Other languages would need
   their own model (`pocket-tts serve --language …` on the server) and a different voice list.
 

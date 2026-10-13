@@ -30,6 +30,8 @@
     perfCopy: $('perf-copy'),
     perfMsg: $('perf-msg'),
     backendField: $('backend-field'),
+    tempField: $('temp-field'),
+    temp: $('temp'),
     backend: $('backend'),
     server: $('server'),
     voice: $('voice'),
@@ -192,7 +194,9 @@
   // Cached audio depends on the engine (and, on this phone, the CPU or WebGPU build) and the
   // voice, so all three are part of its key. Otherwise a WebGPU run plays CPU audio.
   function currentVariant() {
-    const engine = currentEngine() === 'server' ? 'server' : `browser-${window.DeviceTTS.getBackend()}`;
+    const engine = currentEngine() === 'server'
+      ? 'server'
+      : `browser-${window.DeviceTTS.getBackend()}-t${window.DeviceTTS.getTemperature()}`;
     return `${engine}:${currentVoice()}`;
   }
 
@@ -877,6 +881,7 @@
     els.prepare.hidden = server;
     // The WebGPU option only appears where the browser offers WebGPU.
     els.backendField.hidden = server || !(window.DeviceTTS && window.DeviceTTS.gpuAvailable());
+    els.tempField.hidden = server;
   }
 
   async function prepareDevice() {
@@ -905,6 +910,14 @@
       showEngineFields();
     });
     els.prepare.addEventListener('click', prepareDevice);
+    const savedTemp = storage.get('pet.temp');
+    els.temp.value = ['0.3', '0.5', '0.7', '1'].includes(savedTemp) ? savedTemp : '0.7';
+    window.DeviceTTS.setTemperature(els.temp.value);
+    els.temp.addEventListener('change', () => {
+      storage.set('pet.temp', els.temp.value);
+      window.DeviceTTS.setTemperature(els.temp.value);
+      setStatus('Expressiveness changed. Tap Play to hear it.');
+    });
     const savedBackend = storage.get('pet.backend') === 'gpu' ? 'gpu' : 'cpu';
     els.backend.value = savedBackend;
     if (window.DeviceTTS) window.DeviceTTS.setBackend(savedBackend);
