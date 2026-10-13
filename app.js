@@ -739,7 +739,12 @@
     showLibrary();
   }
 
+  // Object URLs for the cover thumbnails currently shown; revoked when the list is redrawn.
+  let coverUrls = [];
+
   async function renderLibrary() {
+    for (const url of coverUrls) URL.revokeObjectURL(url);
+    coverUrls = [];
     let books = [];
     try {
       books = (await idbGetAll('books')).sort((a, b) => b.updatedAt - a.updatedAt);
@@ -757,6 +762,18 @@
     }
     for (const book of books) {
       const li = document.createElement('li');
+      const cover = document.createElement(book.cover ? 'img' : 'div');
+      cover.className = 'cover';
+      if (book.cover) {
+        const url = URL.createObjectURL(book.cover);
+        coverUrls.push(url);
+        cover.src = url;
+        cover.alt = '';
+      } else {
+        cover.classList.add('placeholder');
+        cover.textContent = (book.title || '?').trim().charAt(0).toUpperCase();
+        cover.setAttribute('aria-hidden', 'true');
+      }
       const meta = document.createElement('div');
       meta.className = 'meta';
       const title = document.createElement('div');
@@ -781,7 +798,7 @@
       remove.addEventListener('click', () => removeBook(book));
       actions.append(open, remove);
 
-      li.append(meta, actions);
+      li.append(cover, meta, actions);
       els.bookList.append(li);
     }
   }
@@ -809,6 +826,19 @@
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
   }
 
+  // The cover is optional: a broken or missing image must not stop the import.
+  async function readCover(zip, cover) {
+    if (!cover) return null;
+    const entry = zip.file(cover.path);
+    if (!entry) return null;
+    try {
+      const bytes = await entry.async('uint8array');
+      return new Blob([bytes], { type: cover.mediaType });
+    } catch (_) {
+      return null;
+    }
+  }
+
   async function importEpub(file) {
     if (typeof JSZip === 'undefined') throw new Error('The EPUB reader library did not load. Check your connection and reload.');
     els.importMsg.className = 'muted';
@@ -821,12 +851,14 @@
     };
     const epub = await R.parseEpub(readText, window.DOMParser);
     if (!epub.chunks.length) throw new Error('No readable text found in this EPUB.');
+    const cover = await readCover(zip, epub.cover);
     const id = newId();
     await idbPut('chunks', { id, paragraphs: epub.paragraphs, chunks: epub.chunks });
     await idbPut('books', {
       id,
       title: epub.title || file.name.replace(/\.epub$/i, ''),
       author: epub.author,
+      cover,
       count: epub.chunks.length,
       position: 0,
       offset: 0,

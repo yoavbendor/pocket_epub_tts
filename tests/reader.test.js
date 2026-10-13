@@ -42,6 +42,21 @@ test('parseOpf reads title, author and spine order from the manifest', () => {
   assert.deepEqual(parsed.spine, ['text/a.xhtml', 'text/b.xhtml']);
 });
 
+test('parseOpf finds the cover image from EPUB 3 or EPUB 2 metadata', () => {
+  const epub3 = `<package><manifest>
+      <item id="cov" href="images/cover.jpg" media-type="image/jpeg" properties="cover-image"/>
+      <item id="p" href="cover.xhtml" media-type="application/xhtml+xml"/></manifest>
+      <spine><itemref idref="p"/></spine></package>`;
+  assert.deepEqual(R.parseOpf(epub3).cover, { href: 'images/cover.jpg', mediaType: 'image/jpeg' });
+  const epub2 = `<package><metadata><meta name="cover" content="img1"/></metadata><manifest>
+      <item id="img1" href="art/front.png" media-type="image/png"/></manifest><spine/></package>`;
+  assert.deepEqual(R.parseOpf(epub2).cover, { href: 'art/front.png', mediaType: 'image/png' });
+  // A cover that is not an image (for example an XHTML page) is ignored.
+  const page = `<package><manifest><item id="p" href="cover.xhtml" media-type="application/xhtml+xml" properties="cover-image"/></manifest><spine/></package>`;
+  assert.equal(R.parseOpf(page).cover, null);
+  assert.equal(R.parseOpf('<package><manifest/><spine/></package>').cover, null);
+});
+
 test('sentencesOf splits on sentence ends and cuts overlong sentences at spaces', () => {
   assert.deepEqual(R.sentencesOf('One. Two! Three?', 100), ['One.', 'Two!', 'Three?']);
   assert.deepEqual(R.sentencesOf('He said "Stop." Then left.', 100), ['He said "Stop."', 'Then left.']);
@@ -136,7 +151,7 @@ test('parseEpub reads the spine in order and skips missing items', async () => {
   const files = {
     'META-INF/container.xml': '<container><rootfile full-path="OEBPS/content.opf"/></container>',
     'OEBPS/content.opf': `<package><metadata><title>Book</title></metadata>
-      <manifest><item id="c1" href="text/one.xhtml"/><item id="c2" href="two.xhtml"/><item id="c3" href="gone.xhtml"/></manifest>
+      <manifest><item id="cov" href="img/cover.png" media-type="image/png" properties="cover-image"/><item id="c1" href="text/one.xhtml"/><item id="c2" href="two.xhtml"/><item id="c3" href="gone.xhtml"/></manifest>
       <spine><itemref idref="c2"/><itemref idref="c1"/><itemref idref="c3"/></spine></package>`,
     'OEBPS/two.xhtml': 'SECOND',
     'OEBPS/text/one.xhtml': 'FIRST',
@@ -158,4 +173,5 @@ test('parseEpub reads the spine in order and skips missing items', async () => {
   assert.equal(book.title, 'Book');
   assert.deepEqual(book.paragraphs, ['SECOND', 'FIRST']);
   assert.deepEqual(book.chunks, ['SECOND FIRST']);
+  assert.deepEqual(book.cover, { path: 'OEBPS/img/cover.png', mediaType: 'image/png' });
 });

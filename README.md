@@ -92,6 +92,8 @@ root folder). The page is then at `https://<user>.github.io/<repo>/`.
 - **Storage**: about 1.3 MB of audio per paragraph, and only the next few paragraphs are kept.
   Clearing Chrome's website data deletes books and positions. Tapping **Delete** removes a
   book and its audio.
+- **Covers**: the book list shows the EPUB's cover image, taken at upload. Books uploaded
+  before this change show a letter instead; delete and upload them again to get the cover.
 - **EPUB support**: text in the spine is read in order. Images, footnote popups and
   DRM-protected books are not handled. Some EPUB 2 quirks may affect the title or author.
 - **Expressiveness** (on-device only) sets the sampling temperature: 0.3 is steadier, 1.0 is

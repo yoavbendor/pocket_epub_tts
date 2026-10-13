@@ -98,7 +98,9 @@
       border-top: 1px solid var(--border);
     }
     .list li:first-child { border-top: 0; }
-    .list .meta { min-width: 0; }
+    .list .meta { min-width: 0; flex: 1; }
+    .cover { width: 48px; height: 68px; flex-shrink: 0; object-fit: cover; border-radius: 4px; background: var(--border); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25); }
+    .cover.placeholder { display: flex; align-items: center; justify-content: center; color: var(--muted); font-weight: 600; font-size: 1.2rem; }
     .list .title { font-weight: 600; overflow-wrap: anywhere; }
     .list .actions { display: flex; gap: 6px; flex-shrink: 0; }
     .visually-hidden {

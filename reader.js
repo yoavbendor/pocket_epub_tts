@@ -66,23 +66,39 @@
     return decodeEntities(m[1]);
   }
 
-  // Reads metadata and the reading order (spine) from an OPF package document.
+  // Reads metadata, the reading order (spine) and the cover image from an OPF package document.
+  // The cover is an EPUB 3 manifest item with properties="cover-image", or an EPUB 2
+  // <meta name="cover" content="id"/>. `cover` is an href relative to the OPF file, or null.
   function parseOpf(opfXml) {
-    const manifest = new Map();
+    const manifest = new Map(); // id -> { href, mediaType, properties }
     for (const m of opfXml.matchAll(/<(?:[\w.-]+:)?item\b([^>]*?)\/?>/g)) {
       const id = attr(m[1], 'id');
       const href = attr(m[1], 'href');
-      if (id && href) manifest.set(id, href);
+      if (id && href) {
+        manifest.set(id, { href, mediaType: attr(m[1], 'media-type') || '', properties: attr(m[1], 'properties') || '' });
+      }
     }
     const spine = [];
     for (const m of opfXml.matchAll(/<(?:[\w.-]+:)?itemref\b([^>]*?)\/?>/g)) {
       const idref = attr(m[1], 'idref');
-      if (idref && manifest.has(idref)) spine.push(manifest.get(idref));
+      if (idref && manifest.has(idref)) spine.push(manifest.get(idref).href);
     }
+    let coverId = null;
+    for (const [id, item] of manifest) {
+      if (item.properties.split(/\s+/).includes('cover-image')) coverId = id;
+    }
+    if (!coverId) {
+      for (const m of opfXml.matchAll(/<(?:[\w.-]+:)?meta\b([^>]*?)\/?>/g)) {
+        if (attr(m[1], 'name') === 'cover') coverId = attr(m[1], 'content');
+      }
+    }
+    const coverItem = coverId && manifest.get(coverId);
+    const cover = coverItem && coverItem.mediaType.startsWith('image/') ? coverItem : null;
     return {
       title: tagText(opfXml, 'title'),
       author: tagText(opfXml, 'creator'),
       spine,
+      cover: cover ? { href: cover.href, mediaType: cover.mediaType } : null,
     };
   }
 
@@ -253,7 +269,10 @@
       }
       paragraphs.push(...paragraphsFromXhtml(xhtml, DOMParserImpl));
     }
-    return { title: opf.title, author: opf.author, paragraphs, chunks: chunkText(paragraphs) };
+    const cover = opf.cover
+      ? { path: resolvePath(opfPath, opf.cover.href), mediaType: opf.cover.mediaType }
+      : null;
+    return { title: opf.title, author: opf.author, paragraphs, chunks: chunkText(paragraphs), cover };
   }
 
   return {
