@@ -116,7 +116,7 @@
     return new Promise((resolve, reject) => {
       t.oncomplete = () => resolve();
       t.onerror = () => reject(t.error);
-      t.onabort = () => reject(t.error || new Error('Storage transaction aborted'));
+      t.onabort = () => reject(t.error || new Error('The browser stopped the storage write without a reason'));
     });
   }
 
@@ -132,11 +132,16 @@
   const idbGetAll = (store) => run(store, 'readonly', (s) => s.getAll());
   const idbPut = (store, value) => run(store, 'readwrite', (s) => s.put(value));
 
+  // The cover image is kept in the chunks store under its own key, so the book record stays
+  // small and saving progress does not rewrite the image.
+  const coverKey = (bookId) => `${bookId}:cover`;
+
   async function deleteBookData(id) {
     const db = await openDb();
     const t = db.transaction(['books', 'chunks', 'audio'], 'readwrite');
     t.objectStore('books').delete(id);
     t.objectStore('chunks').delete(id);
+    t.objectStore('chunks').delete(coverKey(id));
     const cursor = t.objectStore('audio').index('bookId').openCursor(IDBKeyRange.only(id));
     cursor.onsuccess = () => {
       const c = cursor.result;
@@ -748,6 +753,17 @@
   // Object URLs for the cover thumbnails currently shown; revoked when the list is redrawn.
   let coverUrls = [];
 
+  async function loadCover(book) {
+    if (!book.hasCover) return null;
+    try {
+      const rec = await idbGet('chunks', coverKey(book.id));
+      return rec ? rec.blob : null;
+    } catch (err) {
+      diag.add(`cover of "${book.title}" could not be read: ` + describeFailure(err));
+      return null;
+    }
+  }
+
   async function renderLibrary() {
     for (const url of coverUrls) URL.revokeObjectURL(url);
     coverUrls = [];
@@ -768,10 +784,11 @@
     }
     for (const book of books) {
       const li = document.createElement('li');
-      const cover = document.createElement(book.cover ? 'img' : 'div');
+      const coverBlob = await loadCover(book);
+      const cover = document.createElement(coverBlob ? 'img' : 'div');
       cover.className = 'cover';
-      if (book.cover) {
-        const url = URL.createObjectURL(book.cover);
+      if (coverBlob) {
+        const url = URL.createObjectURL(coverBlob);
         coverUrls.push(url);
         cover.src = url;
         cover.alt = '';
@@ -925,11 +942,23 @@
       throw wrapFailure('Saving the book text on this phone failed.', err);
     }
     diag.add('saved text');
+    // The cover is saved first, and only then flagged on the book. If saving it fails, the
+    // book is still stored and simply shows a letter instead.
+    let hasCover = false;
+    if (cover) {
+      try {
+        await idbPut('chunks', { id: coverKey(id), blob: cover });
+        hasCover = true;
+        diag.add('saved cover');
+      } catch (err) {
+        diag.add('cover not saved (the book is kept without it): ' + describeFailure(err));
+      }
+    }
     await idbPut('books', {
       id,
       title: epub.title || file.name.replace(/\.epub$/i, ''),
       author: epub.author,
-      cover,
+      hasCover,
       count: epub.chunks.length,
       position: 0,
       offset: 0,
