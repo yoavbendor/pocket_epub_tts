@@ -94,6 +94,8 @@ root folder). The page is then at `https://<user>.github.io/<repo>/`.
   book and its audio.
 - **Covers**: the book list shows the EPUB's cover image, taken at upload. Books uploaded
   before this change show a letter instead; delete and upload them again to get the cover.
+- **Import problems**: each import step and any uncaught error is written to the **Diagnostic
+  log** under the book list. Use **Copy log** to send it when an EPUB will not load.
 - **EPUB support**: text in the spine is read in order. Images, footnote popups and
   DRM-protected books are not handled. Some EPUB 2 quirks may affect the title or author.
 - **Expressiveness** (on-device only) sets the sampling temperature: 0.3 is steadier, 1.0 is

@@ -40,6 +40,9 @@
     library: $('library-card'),
     file: $('file'),
     importMsg: $('import-msg'),
+    logText: $('log-text'),
+    logCopy: $('log-copy'),
+    logMsg: $('log-msg'),
     bookList: $('book-list'),
     reader: $('reader-card'),
     back: $('back'),
@@ -374,6 +377,9 @@
   }
 
   function describeError(err) {
+    if (err === null || err === undefined) {
+      return 'The import failed without an error message. Copy the diagnostic log below.';
+    }
     if (err instanceof TypeError) {
       return 'Could not reach the pocket-tts server. Check the URL, that it is https, and that it allows this page (see README).';
     }
@@ -820,6 +826,53 @@
   function showImportError(err) {
     els.importMsg.textContent = describeError(err);
     els.importMsg.className = 'muted error';
+    diag.add('import failed: ' + describeFailure(err));
+  }
+
+  // Diagnostic log under the book list. Each import step and any uncaught error is recorded,
+  // so a failure can be copied from the phone even when the browser shows no message.
+  const diag = {
+    lines: [],
+    add(text) {
+      const stamp = new Date().toTimeString().slice(0, 8);
+      this.lines.push(`${stamp} ${text}`);
+      if (this.lines.length > 200) this.lines.shift();
+      if (els.logText) els.logText.textContent = this.lines.join('\n');
+    },
+  };
+
+  // Turns whatever was thrown (an Error, a DOMException, a string, null) into readable text.
+  function describeFailure(err, depth = 0) {
+    if (err === null || err === undefined) return `no error object (${err})`;
+    if (typeof err !== 'object') return `${typeof err}: ${String(err)}`;
+    const parts = [err.name || 'object'];
+    if (err.message) parts.push(String(err.message));
+    if (err.code !== undefined) parts.push(`code ${err.code}`);
+    if (err.stack && depth === 0) parts.push(String(err.stack).split('\n').slice(0, 4).join(' | '));
+    if (err.cause && depth < 2) parts.push('caused by ' + describeFailure(err.cause, depth + 1));
+    return parts.join(': ');
+  }
+
+  // A short, user-facing reason for an error. The full detail goes to the diagnostic log.
+  function wrapFailure(message, err) {
+    const wrapped = new Error(message + ' ' + (err && err.message ? err.message : String(err)));
+    wrapped.cause = err;
+    return wrapped;
+  }
+
+  async function copyLog() {
+    const text = els.logText.textContent;
+    try {
+      await navigator.clipboard.writeText(text);
+      els.logMsg.textContent = 'Copied.';
+    } catch (_) {
+      const range = document.createRange();
+      range.selectNodeContents(els.logText);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      els.logMsg.textContent = 'Press and hold the text, then choose Copy.';
+    }
   }
 
   function newId() {
@@ -840,20 +893,38 @@
   }
 
   async function importEpub(file) {
+    diag.add(`import: ${file.name || '(no name)'}, ${file.size} bytes, type "${file.type || ''}"`);
     if (typeof JSZip === 'undefined') throw new Error('The EPUB reader library did not load. Check your connection and reload.');
     els.importMsg.className = 'muted';
     els.importMsg.textContent = `Reading ${file.name}…`;
-    const zip = await JSZip.loadAsync(file);
+    let zip;
+    try {
+      zip = await JSZip.loadAsync(file);
+    } catch (err) {
+      throw wrapFailure('This file could not be opened as an EPUB (zip) archive.', err);
+    }
+    diag.add(`zip: ${Object.keys(zip.files).length} entries`);
     const readText = async (path) => {
       const entry = zip.file(path);
       if (!entry) throw new Error(`Missing ${path} in the EPUB`);
       return entry.async('string');
     };
-    const epub = await R.parseEpub(readText, window.DOMParser);
+    let epub;
+    try {
+      epub = await R.parseEpub(readText, window.DOMParser);
+    } catch (err) {
+      throw wrapFailure('The EPUB structure could not be read.', err);
+    }
+    diag.add(`parsed: "${epub.title}", ${epub.paragraphs.length} paragraphs, ${epub.chunks.length} parts, cover ${epub.cover ? epub.cover.path : 'none'}`);
     if (!epub.chunks.length) throw new Error('No readable text found in this EPUB.');
     const cover = await readCover(zip, epub.cover);
     const id = newId();
-    await idbPut('chunks', { id, paragraphs: epub.paragraphs, chunks: epub.chunks });
+    try {
+      await idbPut('chunks', { id, paragraphs: epub.paragraphs, chunks: epub.chunks });
+    } catch (err) {
+      throw wrapFailure('Saving the book text on this phone failed.', err);
+    }
+    diag.add('saved text');
     await idbPut('books', {
       id,
       title: epub.title || file.name.replace(/\.epub$/i, ''),
@@ -865,6 +936,7 @@
       chunkVersion: R.CHUNK_VERSION,
       updatedAt: Date.now(),
     });
+    diag.add('saved book');
     els.importMsg.textContent = '';
     await showReader(id);
   }
@@ -975,6 +1047,11 @@
         showImportError(err);
       }
     });
+    els.logCopy.addEventListener('click', copyLog);
+    diag.add(`page loaded; ${navigator.userAgent}`);
+    diag.add(`JSZip ${typeof JSZip}, DOMParser ${typeof window.DOMParser}, indexedDB ${typeof indexedDB}, File ${typeof File}`);
+    window.addEventListener('error', (e) => diag.add(`error: ${e.message || '(no message)'} at ${e.filename || '?'}:${e.lineno || '?'}`));
+    window.addEventListener('unhandledrejection', (e) => diag.add('unhandled rejection: ' + describeFailure(e.reason)));
 
     els.toggle.addEventListener('click', () => (state.playing ? pause() : play()));
     els.rate.value = RATES.includes(storage.get('pet.rate')) ? storage.get('pet.rate') : '1';
