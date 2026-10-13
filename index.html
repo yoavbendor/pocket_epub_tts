@@ -89,20 +89,24 @@
     .controls { display: grid; grid-template-columns: 1fr 1.6fr 1fr; gap: 8px; margin: 20px 0 12px; }
     .controls button.big { font-size: 1.2rem; font-weight: 600; padding: 18px 8px; }
     .list { list-style: none; padding: 0; margin: 12px 0 0; }
+    /* Cover on the left; title and buttons stacked on the right, so the title keeps its width on a phone. */
     .list li {
-      display: flex;
-      justify-content: space-between;
+      display: grid;
+      grid-template-columns: 48px minmax(0, 1fr);
+      column-gap: 12px;
+      row-gap: 10px;
       align-items: center;
-      gap: 12px;
       padding: 12px 0;
       border-top: 1px solid var(--border);
     }
     .list li:first-child { border-top: 0; }
-    .list .meta { min-width: 0; flex: 1; }
+    .list li > .cover { grid-column: 1; grid-row: 1 / span 2; }
+    .list .meta { min-width: 0; grid-column: 2; }
+    .list .actions { grid-column: 2; }
     .cover { width: 48px; height: 68px; flex-shrink: 0; object-fit: cover; border-radius: 4px; background: var(--border); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25); }
     .cover.placeholder { display: flex; align-items: center; justify-content: center; color: var(--muted); font-weight: 600; font-size: 1.2rem; }
     .list .title { font-weight: 600; overflow-wrap: anywhere; }
-    .list .actions { display: flex; gap: 6px; flex-shrink: 0; }
+    .list .actions { display: flex; flex-wrap: wrap; gap: 6px; }
     .visually-hidden {
       position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none;
     }
