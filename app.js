@@ -303,8 +303,14 @@
     const key = chunkKey(bookId, variant, index);
     if (inflight.has(key)) return inflight.get(key);
     const job = (async () => {
-      const cached = await idbGet('audio', key);
-      if (cached) return cached.blob;
+      // The cache is an optimisation: if it cannot be read, the part is made again.
+      let cached = null;
+      try {
+        cached = await idbGet('audio', key);
+      } catch (err) {
+        diag.add('audio cache read failed (making the part again): ' + describeFailure(err));
+      }
+      if (cached) return cached.bytes ? new Blob([cached.bytes], { type: 'audio/wav' }) : cached.blob;
       const blob = await serial(async () => {
         const t = performance.now();
         const made = await synthesize(text, variant);
@@ -314,7 +320,13 @@
         if (wall > 0) lastGenRtf = sec / wall;
         return made;
       }, priority);
-      await idbPut('audio', { key, bookId, voice: variant, index, blob });
+      // Stored as bytes: the cache write failed with no reason on some phone browsers when it
+      // held a Blob. A failed write only costs a regeneration later, so playback goes on.
+      try {
+        await idbPut('audio', { key, bookId, voice: variant, index, bytes: await blob.arrayBuffer() });
+      } catch (err) {
+        diag.add('audio cache write failed (playback continues): ' + describeFailure(err));
+      }
       return blob;
     })().finally(() => inflight.delete(key));
     inflight.set(key, job);
@@ -428,7 +440,7 @@
     } catch (err) {
       if (gen !== state.gen) return;
       state.playing = false;
-      setStatus(describeError(err), true);
+      reportError(err);
       render();
       return;
     }
@@ -538,7 +550,7 @@
     audio.play().then(() => setStatus('Playing')).catch((err) => {
       if (!state.playing) return;
       state.playing = false;
-      setStatus(describeError(err), true);
+      reportError(err);
       render();
     });
     preloadNext();
@@ -840,6 +852,12 @@
     renderLibrary();
   }
 
+  // Shows an error on the status line and records it in the diagnostic log.
+  function reportError(err) {
+    diag.add('error: ' + describeFailure(err));
+    setStatus(describeError(err), true);
+  }
+
   function showImportError(err) {
     els.importMsg.textContent = describeError(err);
     els.importMsg.className = 'muted error';
@@ -1023,7 +1041,7 @@
       await loadDeviceEngine();
       setStatus('Voice model ready on this device.');
     } catch (err) {
-      setStatus(describeError(err), true);
+      reportError(err);
     } finally {
       els.prepare.disabled = false;
     }
