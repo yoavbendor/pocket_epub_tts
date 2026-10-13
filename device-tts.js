@@ -15,8 +15,8 @@
     gpu: './vendor/pocket-tts-wasm-gpu/worker.js',
   };
   let backend = 'cpu';
-  // Voices that the vendored worker loads (its VOICE_NAMES list).
-  const VOICES = ['alba', 'azelma', 'cosette', 'eponine', 'fantine', 'javert', 'marius'];
+  // Voices that the vendored worker loads (its VOICE_NAMES list). Each voice is a separate download.
+  const VOICES = ['alba', 'anna', 'azelma', 'jane'];
   const QUANT = 'q8'; // ~146 MB download; f32 is ~240 MB
   // Sampling temperature: lower is steadier, higher is more expressive. The demo uses 0.7.
   let temperature = 0.7;

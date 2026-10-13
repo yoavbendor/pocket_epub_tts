@@ -1,9 +1,10 @@
 Pocket TTS for the browser, WebGPU build (experimental).
 
 Files
-  worker.js          the CPU worker (../pocket-tts-wasm/worker.js) with three edits:
-                     `load_model` replaces the constructor, and `generation_step`
-                     is awaited (WebGPU read-backs are asynchronous).
+  worker.js          the CPU worker (../pocket-tts-wasm/worker.js) with four edits:
+                     `load_model` replaces the constructor, `generation_step`
+                     is awaited (WebGPU read-backs are asynchronous), and the voice
+                     list is the same 4 voices as the CPU build (VOICE_FOLDER).
   ptts_wasm.js       wasm-bindgen glue, built from wrapper-src/
   ptts_wasm_bg.wasm  compiled module (WebGPU backend of xn), built from wrapper-src/
   ptts-webgpu-readback.patch

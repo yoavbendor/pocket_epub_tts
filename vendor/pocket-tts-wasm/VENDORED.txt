@@ -1,9 +1,11 @@
 Pocket TTS for the browser, WebAssembly build (SIMD128, no relaxed SIMD).
 
 Files
-  worker.js          unmodified worker from the WASM demo at
+  worker.js          the worker from the WASM demo at
                      https://laurentmazare.github.io/pocket-tts/ (loads weights
-                     from Hugging Face and drives the module below)
+                     from Hugging Face and drives the module below). Edited: it
+                     loads 4 voices (alba, anna, azelma, jane) and anna and jane come
+                     from embeddings_v3 (VOICE_FOLDER).
   ptts_wasm.js       wasm-bindgen glue, built from wrapper-src/ (this repo)
   ptts_wasm_bg.wasm  compiled module, built from wrapper-src/ (this repo)
   wrapper-src/       Rust wrapper that gives the demo's JavaScript API on top

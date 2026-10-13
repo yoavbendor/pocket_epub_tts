@@ -17,9 +17,8 @@ served by GitHub Pages or any static host.
      (no relaxed SIMD, so iOS 16.4 and later can load it). The module is built from
      `vendor/pocket-tts-wasm/wrapper-src/` (see `BUILD.md`) on top of Laurent Mazare's
      xn-ptts library, with the demo's worker. No server is needed. The first use downloads
-     about 146 MB of weights from Hugging Face. This build has 7 voices (alba, azelma,
-     cosette, eponine, fantine, javert, marius). On a 4-core desktop it generated speech
-     at about 1.1x real time. Phones have not been measured. `device-tts.js` wraps the worker.
+     about 146 MB of weights from Hugging Face. This build has 4 voices (alba, anna, azelma, jane).
+     On a 4-core desktop it generated speech at about 1.1x real time. Phones have not been measured. `device-tts.js` wraps the worker.
      **Speed on this phone** (shown where the browser offers WebGPU) switches to an experimental
      WebGPU build in `vendor/pocket-tts-wasm-gpu/`. It is not measured on a phone yet. See its
      `VENDORED.txt` and `BUILD.md`.

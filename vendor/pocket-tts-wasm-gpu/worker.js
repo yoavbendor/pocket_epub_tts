@@ -9,8 +9,12 @@ function modelUrl(quant) {
   return `${HF_BASE}/tts_b6369a24.safetensors`;
 }
 
+// Anna and Jane are only published in embeddings_v3; alba and azelma stay on v2 so that
+// audio already cached for them does not change.
+const VOICE_FOLDER = { alba: 'embeddings_v2', azelma: 'embeddings_v2', anna: 'embeddings_v3', jane: 'embeddings_v3' };
+
 function voiceUrl(name) {
-  return `${HF_BASE}/embeddings_v2/${name}.safetensors`;
+  return `${HF_BASE}/${VOICE_FOLDER[name]}/${name}.safetensors`;
 }
 
 function post(type, data = {}, transferables = []) {
@@ -201,7 +205,7 @@ class UnigramTokenizer {
 }
 
 // ---- Worker state ----
-const VOICE_NAMES = ['alba', 'marius', 'javert', 'fantine', 'cosette', 'eponine', 'azelma'];
+const VOICE_NAMES = ['alba', 'azelma', 'anna', 'jane'];
 
 // Start WASM compilation immediately so the optimizing compiler (TurboFan)
 // finishes well before the first generation runs.
