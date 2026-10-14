@@ -28,7 +28,6 @@
     rate: $('rate'),
     perfText: $('perf-text'),
     perfCopy: $('perf-copy'),
-    exportFormat: $('export-format'),
     exportPart: $('export-part'),
     exportFrom: $('export-from'),
     exportStart: $('export-start'),
@@ -764,7 +763,6 @@
 
   async function startExport() {
     if (!state.book || !state.chunks || exporting) return;
-    const format = els.exportFormat.value;
     const partSeconds = Number(els.exportPart.value) * 60;
     const bookId = state.book.id;
     const title = safeFileName(state.book.title);
@@ -783,19 +781,14 @@
     try {
       setExportStatus('Preparing…');
       const rate = 24000;
-      let makeSink;
-      if (format === 'mp3') {
-        const lamejs = await loadLame();
-        makeSink = () => AE.mp3Sink(lamejs, rate, EXPORT_KBPS);
-      } else {
-        makeSink = () => AE.wavSink(rate);
-      }
+      const lamejs = await loadLame();
+      const makeSink = () => AE.mp3Sink(lamejs, rate, EXPORT_KBPS);
       try {
         wake = await navigator.wakeLock?.request('screen');
       } catch (_) {
         // Optional: the page still works with the screen allowed to dim.
       }
-      diag.add(`export: ${format}, ${partSeconds / 60} min files, from part ${startIndex + 1} of ${chunks.length}, ${variant}`);
+      diag.add(`export: mp3, ${partSeconds / 60} min files, from part ${startIndex + 1} of ${chunks.length}, ${variant}`);
       const result = await AE.run({
         count: chunks.length,
         startIndex,
@@ -804,7 +797,7 @@
         readPcm: (i) => exportPart(bookId, variant, i, chunks[i], timing),
         makeSink,
         onFile: (blob, n) => {
-          const name = `${title} - ${String(n).padStart(2, '0')}.${format}`;
+          const name = `${title} - ${String(n).padStart(2, '0')}.mp3`;
           diag.add(`export file ready: ${name}, ${blob.size} bytes`);
           addExportFile(blob, name);
         },

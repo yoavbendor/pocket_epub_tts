@@ -62,17 +62,15 @@ test('a stop drops the unfinished file and keeps the finished ones', async () =>
   assert.equal(result.stopped, true);
 });
 
-test('wavFromPcm writes a header that the WAV reader reads back exactly', async () => {
-  const a = Int16Array.from([0, 1, -1, 32767, -32768]);
-  const b = Int16Array.from([7, 8]);
-  const blob = E.wavFromPcm([a, b], 24000);
-  const bytes = await blobBytes(blob);
-  assert.equal(bytes.toString('ascii', 0, 4), 'RIFF');
-  assert.equal(bytes.readUInt32LE(4), bytes.length - 8);
-  assert.equal(bytes.readUInt32LE(24), 24000);
-  assert.equal(bytes.readUInt32LE(40), 7 * 2);
-  const back = R.wavPcm(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
-  assert.deepEqual(Array.from(back), [0, 1, -1, 32767, -32768, 7, 8]);
+test('wavPcm reads back the samples of a 16-bit WAV', () => {
+  const samples = Int16Array.from([0, 1, -1, 32767, -32768]);
+  const header = Buffer.alloc(44);
+  header.write('RIFF', 0); header.writeUInt32LE(36 + samples.length * 2, 4); header.write('WAVE', 8);
+  header.write('fmt ', 12); header.writeUInt32LE(16, 16); header.writeUInt16LE(1, 20); header.writeUInt16LE(1, 22);
+  header.writeUInt32LE(24000, 24); header.writeUInt32LE(48000, 28); header.writeUInt16LE(2, 32); header.writeUInt16LE(16, 34);
+  header.write('data', 36); header.writeUInt32LE(samples.length * 2, 40);
+  const buf = Buffer.concat([header, Buffer.from(samples.buffer)]);
+  assert.deepEqual(Array.from(R.wavPcm(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength))), [0, 1, -1, 32767, -32768]);
 });
 
 test('wavPcm trusts the real length when a streamed header claims too much', () => {
