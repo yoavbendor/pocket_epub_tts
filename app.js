@@ -1022,15 +1022,35 @@
 
   // Diagnostic log under the book list. Each import step and any uncaught error is recorded,
   // so a failure can be copied from the phone even when the browser shows no message.
+  // The log is also kept in session storage, so it survives the page being reloaded after a crash.
+  const LOG_KEY = 'pet.log';
   const diag = {
     lines: [],
     add(text) {
       const stamp = new Date().toTimeString().slice(0, 8);
       this.lines.push(`${stamp} ${text}`);
       if (this.lines.length > 200) this.lines.shift();
+      try {
+        sessionStorage.setItem(LOG_KEY, JSON.stringify(this.lines));
+      } catch (_) {
+        // Storage can be unavailable; the on-screen log still works.
+      }
       if (els.logText) els.logText.textContent = this.lines.join('\n');
     },
+    restore() {
+      // Lines from before a reload, shown first and marked, so a crash leaves a trace.
+      try {
+        const previous = JSON.parse(sessionStorage.getItem(LOG_KEY) || '[]');
+        if (Array.isArray(previous) && previous.length) {
+          this.lines = ['--- the page was reloaded; log from before the reload ---', ...previous];
+          sessionStorage.removeItem(LOG_KEY);
+        }
+      } catch (_) {
+        // Nothing to restore.
+      }
+    },
   };
+  diag.restore();
 
   // Turns whatever was thrown (an Error, a DOMException, a string, null) into readable text.
   function describeFailure(err, depth = 0) {
