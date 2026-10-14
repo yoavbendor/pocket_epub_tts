@@ -18,6 +18,10 @@
   // The small model (KittenTTS nano, ONNX), for phones that cannot hold the full one.
   const NANO_WORKER = './kitten/worker.js?v=log3';
   let model = 'pocket'; // 'pocket' (full quality) or 'nano' (small)
+  // WebGPU crashes the page on iPhone for the small voice (repeatedly, on the second part), so that
+  // voice always runs on the CPU there and its WebGPU option is not offered.
+  const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+  const activeBackend = () => (model === 'nano' && IOS ? 'cpu' : backend);
   // Voices that the vendored worker loads (its VOICE_NAMES list). Each voice is a separate download.
   const VOICES = ['alba', 'anna', 'azelma', 'jane'];
   const NANO_VOICES = ['Bella', 'Jasper', 'Luna', 'Bruno', 'Rosie', 'Hugo', 'Kiki', 'Leo'];
@@ -115,7 +119,7 @@
       loadPromise = new Promise((resolve, reject) => {
         loadWaiter = { resolve, reject };
         try {
-          ensureWorker().postMessage({ type: 'load', quant: QUANT, backend });
+          ensureWorker().postMessage({ type: 'load', quant: QUANT, backend: activeBackend() });
         } catch (err) {
           loadWaiter = null;
           reject(err);
@@ -177,7 +181,8 @@
 
   window.DeviceTTS = {
     VOICES, supported, load, generate, setBackend, gpuAvailable,
-    setTemperature, getTemperature: () => temperature, getBackend: () => backend,
+    setTemperature, getTemperature: () => temperature, getBackend: () => activeBackend(),
     setModel, getModel: () => model, voicesFor,
+    gpuOffered: (name) => gpuAvailable() && !(name === 'nano' && IOS),
   };
 })();

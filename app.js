@@ -1226,7 +1226,7 @@
     // The WebGPU option only appears where the browser offers WebGPU.
     // The small model has no sampling temperature. WebGPU is offered for both models where available.
     const nano = currentEngine() === 'nano';
-    els.backendField.hidden = server || !(window.DeviceTTS && window.DeviceTTS.gpuAvailable());
+    els.backendField.hidden = server || !(window.DeviceTTS && window.DeviceTTS.gpuOffered(nano ? 'nano' : 'pocket'));
     els.tempField.hidden = server || nano;
   }
 
