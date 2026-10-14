@@ -212,9 +212,12 @@
   // voice, so all three are part of its key. Otherwise a WebGPU run plays CPU audio.
   function currentVariant() {
     // The nano key names the pace it was made at, so audio made at an older pace is not reused.
-    const engine = currentEngine() === 'server' || currentEngine() === 'nano'
-      ? (currentEngine() === 'nano' ? NANO_VARIANT : 'server')
-      : `browser-${window.DeviceTTS.getBackend()}-t${window.DeviceTTS.getTemperature()}`;
+    // The small model's key names its pace and backend (WebGPU and CPU can differ slightly).
+    const engine = currentEngine() === 'server'
+      ? 'server'
+      : currentEngine() === 'nano'
+        ? `${NANO_VARIANT}-${window.DeviceTTS.getBackend()}`
+        : `browser-${window.DeviceTTS.getBackend()}-t${window.DeviceTTS.getTemperature()}`;
     return `${engine}:${currentVoice()}`;
   }
 
@@ -304,7 +307,7 @@
     const engine = variant.slice(0, sep);
     const voice = variant.slice(sep + 1);
     if (engine === 'server') return synthesizeOnServer(text, voice);
-    if (window.DeviceTTS) window.DeviceTTS.setModel(engine === NANO_VARIANT ? 'nano' : 'pocket');
+    if (window.DeviceTTS) window.DeviceTTS.setModel(engine.startsWith(NANO_VARIANT) ? 'nano' : 'pocket');
     return synthesizeOnDevice(text, voice);
   }
 
@@ -470,7 +473,7 @@
   function startRun() {
     state.soundStarted = false;
     window.PerfLog.start({
-      backend: currentEngine() === 'server' ? 'server' : currentEngine() === 'nano' ? 'nano' : window.DeviceTTS.getBackend(),
+      backend: currentEngine() === 'server' ? 'server' : (currentEngine() === 'nano' ? 'nano-' : '') + window.DeviceTTS.getBackend(),
       voice: currentVoice(),
       rate: currentRate(),
     });
@@ -1185,9 +1188,9 @@
     els.serverMsg.textContent = '';
     els.prepare.hidden = server;
     // The WebGPU option only appears where the browser offers WebGPU.
-    // The small model has no sampling temperature and no WebGPU build.
+    // The small model has no sampling temperature. WebGPU is offered for both models where available.
     const nano = currentEngine() === 'nano';
-    els.backendField.hidden = server || nano || !(window.DeviceTTS && window.DeviceTTS.gpuAvailable());
+    els.backendField.hidden = server || !(window.DeviceTTS && window.DeviceTTS.gpuAvailable());
     els.tempField.hidden = server || nano;
   }
 

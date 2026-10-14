@@ -1,17 +1,15 @@
 // Module worker for the small on-device voice (KittenTTS nano, ONNX). Speaks the same messages
 // as vendor/pocket-tts-wasm/worker.js, so device-tts.js drives either one.
 // Libraries come from jsDelivr: ONNX Runtime Web (MIT) and espeak-ng (GPL-3.0-or-later).
-import * as ort from 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.30.0/dist/ort.wasm.min.mjs';
 import ESpeakNg from 'https://cdn.jsdelivr.net/npm/espeak-ng@1.0.2/dist/espeak-ng.js';
 import { readNpz, speakText, SAMPLE_RATE } from './tts.mjs';
 
 const MODEL_BASE = 'https://huggingface.co/KittenML/kitten-tts-nano-0.8-int8/resolve/main';
 const MODEL_URL = `${MODEL_BASE}/kitten_tts_nano_v0_8.onnx`;
 const VOICES_URL = `${MODEL_BASE}/voices.npz`;
+const ORT_BASE = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.30.0/dist';
 
-// GitHub Pages cannot send the headers that threads need, so run ONNX Runtime on one thread.
-ort.env.wasm.numThreads = 1;
-
+let ort = null; // the ONNX Runtime build for the chosen backend, set at load
 let session = null;
 let voices = null;
 
@@ -70,17 +68,23 @@ async function phonemize(text) {
   return out;
 }
 
-async function handleLoad() {
+async function handleLoad(backend) {
+  // 'gpu' uses the WebGPU build. Operations WebGPU lacks fall back to the CPU inside ONNX Runtime.
+  if (backend === 'gpu' && !navigator.gpu) throw new Error('WebGPU is not available in this browser.');
+  ort = await import(backend === 'gpu' ? `${ORT_BASE}/ort.webgpu.min.mjs` : `${ORT_BASE}/ort.wasm.min.mjs`);
+  // GitHub Pages cannot send the headers that threads need, so run ONNX Runtime on one thread.
+  ort.env.wasm.numThreads = 1;
   post('status', { message: 'Downloading the voice model (about 25 MB)...' });
   const modelBytes = await fetchBytes(MODEL_URL, 'Voice model');
   post('status', { message: 'Downloading the voice list...' });
   const voiceBytes = await fetchBytes(VOICES_URL, 'Voice list');
   post('status', { message: 'Starting the voice...' });
-  session = await ort.InferenceSession.create(modelBytes, { executionProviders: ['wasm'] });
+  const providers = backend === 'gpu' ? ['webgpu', 'wasm'] : ['wasm'];
+  session = await ort.InferenceSession.create(modelBytes, { executionProviders: providers });
   voices = readNpz(voiceBytes);
   post('status', { message: 'Starting the pronunciation engine...' });
   await espeakPiece('ready');
-  post('loaded', { sampleRate: SAMPLE_RATE });
+  post('loaded', { sampleRate: SAMPLE_RATE, backend });
 }
 
 async function handleGenerate(text, voiceName) {
@@ -102,7 +106,7 @@ self.onmessage = async (e) => {
   const { type, ...data } = e.data;
   try {
     if (type === 'load') {
-      await handleLoad();
+      await handleLoad(data.backend || 'cpu');
     } else if (type === 'generate') {
       await handleGenerate(data.text, data.voiceName);
     }

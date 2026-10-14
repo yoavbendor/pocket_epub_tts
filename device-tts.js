@@ -115,7 +115,7 @@
       loadPromise = new Promise((resolve, reject) => {
         loadWaiter = { resolve, reject };
         try {
-          ensureWorker().postMessage({ type: 'load', quant: QUANT });
+          ensureWorker().postMessage({ type: 'load', quant: QUANT, backend });
         } catch (err) {
           loadWaiter = null;
           reject(err);

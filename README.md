@@ -22,6 +22,11 @@ served by GitHub Pages or any static host.
      **Speed on this phone** (shown where the browser offers WebGPU) switches to an experimental
      WebGPU build in `vendor/pocket-tts-wasm-gpu/`. It is not measured on a phone yet. See its
      `VENDORED.txt` and `BUILD.md`.
+   - **On this phone, small** (KittenTTS nano, about 50 MB): runs the ONNX model in `kitten/worker.js`,
+     with ONNX Runtime Web and espeak-ng from jsDelivr. It lowers the memory and download size, but it is
+     not faster than the full voice on a phone so far. **Speed on this phone** also applies to it: WebGPU
+     uses the ONNX Runtime WebGPU build, and operations it lacks run on the CPU. Each choice has its own
+     audio cache.
    - **My pocket-tts server:** each paragraph is sent to `POST /tts` on your server (the
      setup below).
    Each part is generated as its own WAV, cached in IndexedDB keyed by engine and voice, and
