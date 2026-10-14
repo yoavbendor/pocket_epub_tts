@@ -200,6 +200,8 @@
     return els.voice.value;
   }
 
+  // Cache key of the small model's audio (its pace is part of the key).
+  const NANO_VARIANT = 'nano-natural';
   // 'browser' runs the full model on this device, 'nano' the small one; 'server' calls a pocket-tts server.
   function currentEngine() {
     const value = els.engine.value;
@@ -209,8 +211,9 @@
   // Cached audio depends on the engine (and, on this phone, the CPU or WebGPU build) and the
   // voice, so all three are part of its key. Otherwise a WebGPU run plays CPU audio.
   function currentVariant() {
+    // The nano key names the pace it was made at, so audio made at an older pace is not reused.
     const engine = currentEngine() === 'server' || currentEngine() === 'nano'
-      ? currentEngine()
+      ? (currentEngine() === 'nano' ? NANO_VARIANT : 'server')
       : `browser-${window.DeviceTTS.getBackend()}-t${window.DeviceTTS.getTemperature()}`;
     return `${engine}:${currentVoice()}`;
   }
@@ -301,7 +304,7 @@
     const engine = variant.slice(0, sep);
     const voice = variant.slice(sep + 1);
     if (engine === 'server') return synthesizeOnServer(text, voice);
-    if (window.DeviceTTS) window.DeviceTTS.setModel(engine === 'nano' ? 'nano' : 'pocket');
+    if (window.DeviceTTS) window.DeviceTTS.setModel(engine === NANO_VARIANT ? 'nano' : 'pocket');
     return synthesizeOnDevice(text, voice);
   }
 

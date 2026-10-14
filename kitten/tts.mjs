@@ -18,6 +18,9 @@ const SPEED_PRIORS = {
   'expr-voice-4-m': 0.9, 'expr-voice-4-f': 0.8, 'expr-voice-5-m': 0.8, 'expr-voice-5-f': 0.8,
 };
 export const SAMPLE_RATE = 24000;
+// The model's speed prior (0.8 for Bella) already slows every voice, so a plain 1.0 sounds slow.
+// 1.25 times the prior is the natural pace; the playback speed control then works on top of it.
+export const SPEECH_SPEED = 1.25;
 const TRIM_TAIL = 5000; // the model's last 5000 samples are dropped (kittenml does the same)
 
 // Python's re.findall(r"\w+|[^\w\s]") on the phonemes, then the symbol lookup. Unknown symbols are skipped.
@@ -178,7 +181,7 @@ export function buildInputs(text, phonemes, voiceName, voices, speed = 1.0) {
 
 // Speaks one paragraph: one model run per kittenml chunk. `phonemize(text)` returns espeak phonemes.
 // `onPiece(samples)` gets each run's audio as it is ready. Resolves when all runs are done.
-export async function speakText({ ort, session, voices, phonemize, text, voiceName, speed = 1.0, onPiece }) {
+export async function speakText({ ort, session, voices, phonemize, text, voiceName, speed = SPEECH_SPEED, onPiece }) {
   for (const chunk of modelChunks(text)) {
     const inp = buildInputs(chunk, await phonemize(chunk), voiceName, voices, speed);
     const out = await session.run({
