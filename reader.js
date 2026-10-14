@@ -12,6 +12,8 @@
   // chunking changes, so books stored with the old chunks are re-split on open.
   const CHUNK_CHARS = 160;
   const CHUNK_VERSION = 4;
+  // Part lengths the reader offers, in characters. Each part is whole sentences up to this length.
+  const PART_LENGTHS = { short: CHUNK_CHARS, medium: 300, long: 450 };
 
   const NAMED_ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
 
@@ -274,7 +276,7 @@
   }
 
   // Reads a whole EPUB. `readText(path)` returns a file's text, or throws if it is missing.
-  async function parseEpub(readText, DOMParserImpl) {
+  async function parseEpub(readText, DOMParserImpl, maxLen = CHUNK_CHARS) {
     const opfPath = parseContainer(await readText('META-INF/container.xml'));
     const opf = parseOpf(await readText(opfPath));
     const paragraphs = [];
@@ -290,7 +292,7 @@
     const cover = opf.cover
       ? { path: resolvePath(opfPath, opf.cover.href), mediaType: opf.cover.mediaType }
       : null;
-    return { title: opf.title, author: opf.author, paragraphs, chunks: chunkText(paragraphs), cover };
+    return { title: opf.title, author: opf.author, paragraphs, chunks: chunkText(paragraphs, maxLen), cover };
   }
 
   return {
@@ -303,6 +305,7 @@
     normalizeText,
     CHUNK_CHARS,
     CHUNK_VERSION,
+    PART_LENGTHS,
     fixWavHeader,
     wavPcm,
     encodeWav,

@@ -175,3 +175,15 @@ test('parseEpub reads the spine in order and skips missing items', async () => {
   assert.deepEqual(book.chunks, ['SECOND FIRST']);
   assert.deepEqual(book.cover, { path: 'OEBPS/img/cover.png', mediaType: 'image/png' });
 });
+
+test('chunkText groups whole sentences up to a longer part length', () => {
+  const sentences = Array.from({ length: 12 }, (_, i) => `Sentence number ${i + 1} ends here.`);
+  const paragraphs = [sentences.join(' ')];
+  const short = R.chunkText(paragraphs, R.PART_LENGTHS.short);
+  const long = R.chunkText(paragraphs, R.PART_LENGTHS.long);
+  assert.ok(long.length < short.length, `${long.length} parts vs ${short.length}`);
+  assert.ok(long.every((c) => c.length <= R.PART_LENGTHS.long), JSON.stringify(long));
+  // Every part starts and ends at a sentence boundary.
+  assert.ok(long.every((c) => /^Sentence number \d+ ends here\.( Sentence number \d+ ends here\.)*$/.test(c)), JSON.stringify(long));
+  assert.equal(long.join(' '), paragraphs[0]);
+});

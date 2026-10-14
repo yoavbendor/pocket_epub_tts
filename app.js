@@ -41,6 +41,7 @@
     backend: $('backend'),
     server: $('server'),
     voice: $('voice'),
+    partLength: $('partlen'),
     testServer: $('test-server'),
     serverMsg: $('server-msg'),
     library: $('library-card'),
@@ -868,15 +869,22 @@
     renderLibrary();
   }
 
+  // The part length chosen in settings: 'short', 'medium' or 'long'. Applies to books opened or added after the change.
+  function currentPartLength() {
+    const value = els.partLength.value;
+    return Object.prototype.hasOwnProperty.call(R.PART_LENGTHS, value) ? value : 'short';
+  }
+
   async function showReader(id) {
     let meta = await idbGet('books', id);
     let data = await idbGet('chunks', id);
     if (!meta || !data) throw new Error('That book is no longer stored on this device.');
-    if (meta.chunkVersion !== R.CHUNK_VERSION) {
-      // Older books were split into longer parts. Re-split them, keep the place roughly
-      // where it was, and drop audio cut for the old parts.
+    const partLength = currentPartLength();
+    if (meta.chunkVersion !== R.CHUNK_VERSION || (meta.partLength || 'short') !== partLength) {
+      // The book was split at another size or by an older version. Re-split it, keep the place
+      // roughly where it was, and drop audio cut for the old parts.
       const paragraphs = data.paragraphs || data.chunks;
-      const chunks = R.chunkText(paragraphs);
+      const chunks = R.chunkText(paragraphs, R.PART_LENGTHS[partLength]);
       const fraction = meta.position / Math.max(meta.count, 1);
       meta = {
         ...meta,
@@ -884,6 +892,7 @@
         position: Math.min(Math.floor(fraction * chunks.length), chunks.length - 1),
         offset: 0,
         chunkVersion: R.CHUNK_VERSION,
+        partLength,
       };
       data = { id, paragraphs, chunks };
       await idbPut('chunks', data);
@@ -1129,7 +1138,7 @@
     };
     let epub;
     try {
-      epub = await R.parseEpub(readText, window.DOMParser);
+      epub = await R.parseEpub(readText, window.DOMParser, R.PART_LENGTHS[currentPartLength()]);
     } catch (err) {
       throw wrapFailure('The EPUB structure could not be read.', err);
     }
@@ -1164,6 +1173,7 @@
       position: 0,
       offset: 0,
       chunkVersion: R.CHUNK_VERSION,
+      partLength: currentPartLength(),
       updatedAt: Date.now(),
     });
     diag.add('saved book');
@@ -1265,6 +1275,12 @@
     els.server.addEventListener('change', () => storage.set('pet.server', serverUrl()));
     // Settings are only shown in the library, so the voice never changes under a playing book.
     els.voice.addEventListener('change', () => storage.set('pet.voice', currentVoice()));
+    const savedPartLength = storage.get('pet.partLength');
+    els.partLength.value = Object.prototype.hasOwnProperty.call(R.PART_LENGTHS, savedPartLength) ? savedPartLength : 'short';
+    els.partLength.addEventListener('change', () => {
+      storage.set('pet.partLength', currentPartLength());
+      setStatus('Part length changed. Books are split again when you open them.');
+    });
     els.testServer.addEventListener('click', testServer);
     showEngineFields();
 
