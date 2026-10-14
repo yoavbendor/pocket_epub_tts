@@ -285,18 +285,27 @@
     if (!window.DeviceTTS) throw new Error('The on-device voice did not load. Reload the page, or use the server engine.');
     window.DeviceTTS.setModel(currentEngine() === 'nano' ? 'nano' : 'pocket');
     const t = performance.now();
+    diag.add(`voice: loading ${window.DeviceTTS.getModel()} model, speed setting ${window.DeviceTTS.getBackend()}`);
     return window.DeviceTTS.load((msg) => {
       if (msg.type === 'progress' && msg.pct >= 0) setStatus(`Downloading ${msg.label}: ${msg.pct}%`);
       else if (msg.type === 'status') setStatus(msg.message);
+      if (msg.type === 'status') diag.add(`voice: ${msg.message}`);
     }).then((ready) => {
       window.PerfLog.addLoad(performance.now() - t);
+      diag.add(`voice: ready after ${Math.round(performance.now() - t)} ms`);
       return ready;
+    }, (err) => {
+      diag.add('voice: load failed: ' + describeFailure(err));
+      throw err;
     });
   }
 
   async function synthesizeOnDevice(text, voice) {
     await loadDeviceEngine();
+    const t = performance.now();
+    diag.add(`voice: making a part of ${text.length} characters`);
     const { chunks, sampleRate } = await window.DeviceTTS.generate(text, voice);
+    diag.add(`voice: part made in ${Math.round(performance.now() - t)} ms`);
     if (!chunks.length) throw new Error('The on-device voice produced no audio for this part.');
     return new Blob([R.encodeWav(chunks, sampleRate)], { type: 'audio/wav' });
   }
@@ -1022,8 +1031,15 @@
 
   // Diagnostic log under the book list. Each import step and any uncaught error is recorded,
   // so a failure can be copied from the phone even when the browser shows no message.
-  // The log is also kept in session storage, so it survives the page being reloaded after a crash.
+  // The log is also kept in local storage, so it survives the page being reloaded after a crash.
   const LOG_KEY = 'pet.log';
+  const logStore = () => {
+    try {
+      return window.localStorage;
+    } catch (_) {
+      return null;
+    }
+  };
   const diag = {
     lines: [],
     add(text) {
@@ -1031,7 +1047,7 @@
       this.lines.push(`${stamp} ${text}`);
       if (this.lines.length > 200) this.lines.shift();
       try {
-        sessionStorage.setItem(LOG_KEY, JSON.stringify(this.lines));
+        logStore()?.setItem(LOG_KEY, JSON.stringify(this.lines));
       } catch (_) {
         // Storage can be unavailable; the on-screen log still works.
       }
@@ -1040,10 +1056,10 @@
     restore() {
       // Lines from before a reload, shown first and marked, so a crash leaves a trace.
       try {
-        const previous = JSON.parse(sessionStorage.getItem(LOG_KEY) || '[]');
+        const previous = JSON.parse(logStore()?.getItem(LOG_KEY) || '[]');
         if (Array.isArray(previous) && previous.length) {
           this.lines = ['--- the page was reloaded; log from before the reload ---', ...previous];
-          sessionStorage.removeItem(LOG_KEY);
+          logStore().removeItem(LOG_KEY);
         }
       } catch (_) {
         // Nothing to restore.

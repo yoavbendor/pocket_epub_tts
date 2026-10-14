@@ -81,6 +81,7 @@ async function handleLoad(backend) {
   post('status', { message: 'Starting the voice...' });
   const providers = backend === 'gpu' ? ['webgpu', 'wasm'] : ['wasm'];
   session = await ort.InferenceSession.create(modelBytes, { executionProviders: providers });
+  post('status', { message: `Voice model started (${providers.join(' then ')})` });
   voices = readNpz(voiceBytes);
   post('status', { message: 'Starting the pronunciation engine...' });
   await espeakPiece('ready');
