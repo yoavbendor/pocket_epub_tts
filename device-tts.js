@@ -16,7 +16,7 @@
   };
   let backend = 'cpu';
   // The small model (KittenTTS nano, ONNX), for phones that cannot hold the full one.
-  const NANO_WORKER = './kitten/worker.js';
+  const NANO_WORKER = './kitten/worker.js?v=log3';
   let model = 'pocket'; // 'pocket' (full quality) or 'nano' (small)
   // Voices that the vendored worker loads (its VOICE_NAMES list). Each voice is a separate download.
   const VOICES = ['alba', 'anna', 'azelma', 'jane'];
