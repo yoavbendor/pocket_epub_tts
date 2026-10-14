@@ -184,13 +184,16 @@ export function buildInputs(text, phonemes, voiceName, voices, speed = 1.0) {
 export async function speakText({ ort, session, voices, phonemize, text, voiceName, speed = SPEECH_SPEED, onPiece }) {
   for (const chunk of modelChunks(text)) {
     const inp = buildInputs(chunk, await phonemize(chunk), voiceName, voices, speed);
-    const out = await session.run({
+    const feeds = {
       input_ids: new ort.Tensor('int64', BigInt64Array.from(inp.tokens, BigInt), [1, inp.tokens.length]),
       style: new ort.Tensor('float32', inp.style, [1, inp.style.length]),
       speed: new ort.Tensor('float32', Float32Array.of(inp.speed), [1]),
-    });
+    };
+    const out = await session.run(feeds);
     const waveform = out[session.outputNames[0]].data;
     const audio = waveform.slice(0, Math.max(0, waveform.length - TRIM_TAIL));
+    // Free the run's tensors now. On WebGPU they hold GPU memory, which a phone can run out of.
+    for (const t of [...Object.values(feeds), ...Object.values(out)]) t.dispose?.();
     onPiece(audio);
   }
 }
