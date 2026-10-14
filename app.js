@@ -200,24 +200,17 @@
     return els.voice.value;
   }
 
-  // Cache key of the small model's audio (its pace is part of the key).
-  const NANO_VARIANT = 'nano-natural';
-  // 'browser' runs the full model on this device, 'nano' the small one; 'server' calls a pocket-tts server.
+  // 'browser' runs the model on this device; 'server' calls a pocket-tts server.
   function currentEngine() {
-    const value = els.engine.value;
-    return value === 'server' || value === 'nano' ? value : 'browser';
+    return els.engine.value === 'server' ? 'server' : 'browser';
   }
 
   // Cached audio depends on the engine (and, on this phone, the CPU or WebGPU build) and the
   // voice, so all three are part of its key. Otherwise a WebGPU run plays CPU audio.
   function currentVariant() {
-    // The nano key names the pace it was made at, so audio made at an older pace is not reused.
-    // The small model's key names its pace and backend (WebGPU and CPU can differ slightly).
     const engine = currentEngine() === 'server'
       ? 'server'
-      : currentEngine() === 'nano'
-        ? `${NANO_VARIANT}-${window.DeviceTTS.getBackend()}`
-        : `browser-${window.DeviceTTS.getBackend()}-t${window.DeviceTTS.getTemperature()}`;
+      : `browser-${window.DeviceTTS.getBackend()}-t${window.DeviceTTS.getTemperature()}`;
     return `${engine}:${currentVoice()}`;
   }
 
@@ -283,9 +276,8 @@
   // Downloads the model once per page load. The worker's weights are fetched from Hugging Face.
   function loadDeviceEngine() {
     if (!window.DeviceTTS) throw new Error('The on-device voice did not load. Reload the page, or use the server engine.');
-    window.DeviceTTS.setModel(currentEngine() === 'nano' ? 'nano' : 'pocket');
     const t = performance.now();
-    diag.add(`voice: loading ${window.DeviceTTS.getModel()} model, speed setting ${window.DeviceTTS.getBackend()}`);
+    diag.add(`voice: loading, speed setting ${window.DeviceTTS.getBackend()}`);
     return window.DeviceTTS.load((msg) => {
       if (msg.type === 'progress' && msg.pct >= 0) setStatus(`Downloading ${msg.label}: ${msg.pct}%`);
       else if (msg.type === 'status') setStatus(msg.message);
@@ -310,13 +302,12 @@
     return new Blob([R.encodeWav(chunks, sampleRate)], { type: 'audio/wav' });
   }
 
-  // `variant` is 'browser-<backend>-t<temp>:<voice>', 'nano:<voice>' or 'server:<voice>', as built by currentVariant().
+  // `variant` is 'browser-<backend>-t<temp>:<voice>' or 'server:<voice>', as built by currentVariant().
   function synthesize(text, variant) {
     const sep = variant.indexOf(':');
     const engine = variant.slice(0, sep);
     const voice = variant.slice(sep + 1);
     if (engine === 'server') return synthesizeOnServer(text, voice);
-    if (window.DeviceTTS) window.DeviceTTS.setModel(engine.startsWith(NANO_VARIANT) ? 'nano' : 'pocket');
     return synthesizeOnDevice(text, voice);
   }
 
@@ -472,7 +463,7 @@
     prefetch();
   }
 
-  const RATES = ['1', '1.05', '1.1', '1.15', '1.2', '1.25', '1.3'];
+  const RATES = ['1', '1.2', '1.4', '1.6', '1.8', '2.0'];
 
   function currentRate() {
     return parseFloat(els.rate.value) || 1;
@@ -482,7 +473,7 @@
   function startRun() {
     state.soundStarted = false;
     window.PerfLog.start({
-      backend: currentEngine() === 'server' ? 'server' : (currentEngine() === 'nano' ? 'nano-' : '') + window.DeviceTTS.getBackend(),
+      backend: currentEngine() === 'server' ? 'server' : window.DeviceTTS.getBackend(),
       voice: currentVoice(),
       rate: currentRate(),
     });
@@ -1201,7 +1192,7 @@
   // The on-device build speaks fewer voices than the server, so the list follows the engine.
   function voicesFor(engine) {
     if (engine === 'server' || !window.DeviceTTS) return VOICES;
-    return window.DeviceTTS.voicesFor(engine === 'nano' ? 'nano' : 'pocket');
+    return window.DeviceTTS.VOICES;
   }
 
   function populateVoices() {
@@ -1224,10 +1215,8 @@
     els.serverMsg.textContent = '';
     els.prepare.hidden = server;
     // The WebGPU option only appears where the browser offers WebGPU.
-    // The small model has no sampling temperature. WebGPU is offered for both models where available.
-    const nano = currentEngine() === 'nano';
-    els.backendField.hidden = server || !(window.DeviceTTS && window.DeviceTTS.gpuOffered(nano ? 'nano' : 'pocket'));
-    els.tempField.hidden = server || nano;
+    els.backendField.hidden = server || !(window.DeviceTTS && window.DeviceTTS.gpuAvailable());
+    els.tempField.hidden = server;
   }
 
   async function prepareDevice() {
@@ -1246,7 +1235,7 @@
     // First visit: use the phone only if this browser can run the on-device build.
     const savedEngine = storage.get('pet.engine');
     const deviceOk = Boolean(window.DeviceTTS && window.DeviceTTS.supported());
-    const engine = ['server', 'nano', 'browser'].includes(savedEngine) ? savedEngine : (deviceOk ? 'browser' : 'server');
+    const engine = ['server', 'browser'].includes(savedEngine) ? savedEngine : (deviceOk ? 'browser' : 'server');
     els.engine.value = engine;
     populateVoices();
     els.engine.addEventListener('change', () => {

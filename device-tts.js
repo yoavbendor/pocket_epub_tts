@@ -15,16 +15,7 @@
     gpu: './vendor/pocket-tts-wasm-gpu/worker.js',
   };
   let backend = 'cpu';
-  // The small model (KittenTTS nano, ONNX), for phones that cannot hold the full one.
-  const NANO_WORKER = './kitten/worker.js?v=log3';
-  let model = 'pocket'; // 'pocket' (full quality) or 'nano' (small)
-  // WebGPU crashes the page on iPhone for the small voice (repeatedly, on the second part), so that
-  // voice always runs on the CPU there and its WebGPU option is not offered.
-  const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
-  const activeBackend = () => (model === 'nano' && IOS ? 'cpu' : backend);
-  // Voices that the vendored worker loads (its VOICE_NAMES list). Each voice is a separate download.
   const VOICES = ['alba', 'anna', 'azelma', 'jane'];
-  const NANO_VOICES = ['Bella', 'Jasper', 'Luna', 'Bruno', 'Rosie', 'Hugo', 'Kiki', 'Leo'];
   const QUANT = 'q8'; // ~146 MB download; f32 is ~240 MB
   // Sampling temperature: lower is steadier, higher is more expressive. The demo uses 0.7.
   let temperature = 0.7;
@@ -40,7 +31,6 @@
 
   // True when this browser can load the on-device voice build.
   function supported() {
-    if (model === 'nano') return typeof Worker !== 'undefined' && typeof WebAssembly !== 'undefined';
     return typeof Worker !== 'undefined' && typeof WebAssembly !== 'undefined' && WebAssembly.validate(SIMD_PROBE);
   }
 
@@ -103,7 +93,7 @@
     if (typeof Worker === 'undefined' || typeof WebAssembly === 'undefined') {
       throw new Error('This browser cannot run the voice on the device. Use the server engine instead.');
     }
-    const url = model === 'nano' ? NANO_WORKER : WORKERS[backend];
+    const url = WORKERS[backend];
     worker = new Worker(url, { type: 'module' });
     worker.onmessage = onMessage;
     worker.onerror = (e) => failAll(new Error(e.message || 'The voice worker failed to start.'));
@@ -119,7 +109,7 @@
       loadPromise = new Promise((resolve, reject) => {
         loadWaiter = { resolve, reject };
         try {
-          ensureWorker().postMessage({ type: 'load', quant: QUANT, backend: activeBackend() });
+          ensureWorker().postMessage({ type: 'load', quant: QUANT, backend });
         } catch (err) {
           loadWaiter = null;
           reject(err);
@@ -134,28 +124,12 @@
 
   function generate(text, voice) {
     if (!ready) return Promise.reject(new Error('The voice model is not loaded yet.'));
-    if (!voicesFor(model).includes(voice)) return Promise.reject(new Error(`This build has no voice "${voice}".`));
+    if (!VOICES.includes(voice)) return Promise.reject(new Error(`This build has no voice "${voice}".`));
     if (genWaiter) return Promise.reject(new Error('The on-device voice is busy with another paragraph.'));
     return new Promise((resolve, reject) => {
       genWaiter = { chunks: [], resolve, reject };
       worker.postMessage({ type: 'generate', text, voiceName: voice, temperature });
     });
-  }
-
-  // Lists the voices of a model: 'pocket' or 'nano'.
-  function voicesFor(name) {
-    return name === 'nano' ? NANO_VOICES : VOICES;
-  }
-
-  // Switching model restarts the worker, as switching backend does.
-  function setModel(name) {
-    if ((name !== 'pocket' && name !== 'nano') || name === model) return;
-    failAll(new Error('The voice model was switched; try again.'));
-    if (worker) worker.terminate();
-    worker = null;
-    ready = null;
-    loadPromise = null;
-    model = name;
   }
 
   // Switching backends restarts the worker. Any request in flight fails first.
@@ -181,8 +155,6 @@
 
   window.DeviceTTS = {
     VOICES, supported, load, generate, setBackend, gpuAvailable,
-    setTemperature, getTemperature: () => temperature, getBackend: () => activeBackend(),
-    setModel, getModel: () => model, voicesFor,
-    gpuOffered: (name) => gpuAvailable() && !(name === 'nano' && IOS),
+    setTemperature, getTemperature: () => temperature, getBackend: () => backend,
   };
 })();
