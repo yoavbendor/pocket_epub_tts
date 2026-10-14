@@ -114,6 +114,7 @@
     #current-text { white-space: pre-wrap; font-size: 0.95rem; }
     .speed { margin-top: 12px; }
     .speed select { width: auto; min-width: 8em; }
+    #export-files a { display: block; padding: 10px 0; color: var(--accent); overflow-wrap: anywhere; }
     .perf { white-space: pre-wrap; font: 0.8rem/1.4 ui-monospace, Menlo, monospace; overflow-x: auto; color: var(--muted); }
     details { margin-top: 12px; }
     summary { color: var(--muted); cursor: pointer; }
@@ -225,6 +226,41 @@
         </div>
       </details>
 
+      <details id="export">
+        <summary>Export audio</summary>
+        <p class="muted">Makes the book into audio files you can save. It takes about as long as the audio,
+          divided by the generation speed shown while it runs. Keep this page open with the screen on.
+          Parts already listened to are reused.</p>
+        <label>
+          Format
+          <select id="export-format">
+            <option value="mp3">MP3 (about 1/10 the size)</option>
+            <option value="wav">WAV (no encoder needed)</option>
+          </select>
+        </label>
+        <label>
+          Length of each file
+          <select id="export-part">
+            <option value="15">15 minutes</option>
+            <option value="30" selected>30 minutes</option>
+            <option value="60">60 minutes</option>
+          </select>
+        </label>
+        <label>
+          Start
+          <select id="export-from">
+            <option value="start">From the beginning</option>
+            <option value="here">From the current part</option>
+          </select>
+        </label>
+        <div class="row">
+          <button id="export-start" class="small" type="button">Start export</button>
+          <button id="export-stop" class="secondary danger small" type="button" disabled>Stop</button>
+        </div>
+        <p id="export-status" class="muted" role="status"></p>
+        <div id="export-files"></div>
+      </details>
+
       <details>
         <summary>Current paragraph text</summary>
         <p id="current-text"></p>
@@ -235,9 +271,10 @@
   <audio id="player" preload="auto"></audio>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.2/jszip.min.js"></script>
-  <script src="reader.js?v=gaps2"></script>
-  <script src="device-tts.js?v=gaps2"></script>
-  <script src="perf.js?v=gaps2"></script>
-  <script src="app.js?v=gaps2"></script>
+  <script src="reader.js?v=export1"></script>
+  <script src="export.js?v=export1"></script>
+  <script src="device-tts.js?v=export1"></script>
+  <script src="perf.js?v=export1"></script>
+  <script src="app.js?v=export1"></script>
 </body>
 </html>

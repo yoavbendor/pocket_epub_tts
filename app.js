@@ -28,6 +28,13 @@
     rate: $('rate'),
     perfText: $('perf-text'),
     perfCopy: $('perf-copy'),
+    exportFormat: $('export-format'),
+    exportPart: $('export-part'),
+    exportFrom: $('export-from'),
+    exportStart: $('export-start'),
+    exportStop: $('export-stop'),
+    exportStatus: $('export-status'),
+    exportFiles: $('export-files'),
     perfMsg: $('perf-msg'),
     backendField: $('backend-field'),
     tempField: $('temp-field'),
@@ -689,6 +696,152 @@
     els.perfMsg.textContent = '';
   }
 
+  // ---------- Audio export ----------
+  // Makes the rest of the book as files for saving. Parts are made the same way as for playback
+  // (same engine, same voice) but are not written to the audio cache, so the cache stays small.
+  const AE = window.AudioExport;
+  const LAME_URL = 'https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js';
+  const EXPORT_KBPS = 64;
+  let exporting = null; // { stop } while an export runs
+  let exportUrls = []; // object URLs of finished files, released when the next export starts
+
+  function setExportStatus(text) {
+    els.exportStatus.textContent = text;
+  }
+
+  function loadLame() {
+    if (window.lamejs) return Promise.resolve(window.lamejs);
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = LAME_URL;
+      script.onload = () => (window.lamejs ? resolve(window.lamejs) : reject(new Error('The MP3 encoder loaded but cannot be used.')));
+      script.onerror = () => reject(new Error('The MP3 encoder could not be downloaded. Check the connection, or choose WAV.'));
+      document.head.append(script);
+    });
+  }
+
+  // One part as 16-bit samples: from the cache when it is there, otherwise made now (not cached).
+  async function exportPart(bookId, variant, index, text, timing) {
+    let cached = null;
+    try {
+      cached = await idbGet('audio', chunkKey(bookId, variant, index));
+    } catch (err) {
+      diag.add('audio cache read failed during export: ' + describeFailure(err));
+    }
+    if (cached) return R.wavPcm(cached.bytes || (await cached.blob.arrayBuffer()));
+    const t = performance.now();
+    const blob = await serial(() => synthesize(text, variant), PRIORITY_AHEAD);
+    timing.wall += (performance.now() - t) / 1000;
+    timing.audio += wavSeconds(blob);
+    return R.wavPcm(await blob.arrayBuffer());
+  }
+
+  function safeFileName(title) {
+    return (title || 'book').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) || 'book';
+  }
+
+  function addExportFile(blob, name) {
+    const url = URL.createObjectURL(blob);
+    exportUrls.push(url);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = name;
+    const mb = (blob.size / 1048576).toFixed(1);
+    link.textContent = `Save ${name} (${mb} MB)`;
+    els.exportFiles.append(link);
+  }
+
+  function clearExportFiles() {
+    for (const url of exportUrls) URL.revokeObjectURL(url);
+    exportUrls = [];
+    els.exportFiles.replaceChildren();
+  }
+
+  function formatMinutes(seconds) {
+    const m = Math.floor(seconds / 60);
+    return m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`;
+  }
+
+  async function startExport() {
+    if (!state.book || !state.chunks || exporting) return;
+    const format = els.exportFormat.value;
+    const partSeconds = Number(els.exportPart.value) * 60;
+    const bookId = state.book.id;
+    const title = safeFileName(state.book.title);
+    const chunks = state.chunks;
+    const variant = currentVariant();
+    const startIndex = els.exportFrom.value === 'here' ? state.index : 0;
+    const job = { stop: false };
+    exporting = job;
+    if (state.playing) pause();
+    clearExportFiles();
+    els.exportStart.disabled = true;
+    els.exportStop.disabled = false;
+    const timing = { wall: 0, audio: 0 };
+    const began = performance.now();
+    let wake = null;
+    try {
+      setExportStatus('Preparing…');
+      const rate = 24000;
+      let makeSink;
+      if (format === 'mp3') {
+        const lamejs = await loadLame();
+        makeSink = () => AE.mp3Sink(lamejs, rate, EXPORT_KBPS);
+      } else {
+        makeSink = () => AE.wavSink(rate);
+      }
+      try {
+        wake = await navigator.wakeLock?.request('screen');
+      } catch (_) {
+        // Optional: the page still works with the screen allowed to dim.
+      }
+      diag.add(`export: ${format}, ${partSeconds / 60} min files, from part ${startIndex + 1} of ${chunks.length}, ${variant}`);
+      const result = await AE.run({
+        count: chunks.length,
+        startIndex,
+        sampleRate: rate,
+        partSamples: partSeconds * rate,
+        readPcm: (i) => exportPart(bookId, variant, i, chunks[i], timing),
+        makeSink,
+        onFile: (blob, n) => {
+          const name = `${title} - ${String(n).padStart(2, '0')}.${format}`;
+          diag.add(`export file ready: ${name}, ${blob.size} bytes`);
+          addExportFile(blob, name);
+        },
+        onProgress: ({ done, total, audioSec, files }) => {
+          const elapsed = (performance.now() - began) / 1000;
+          const left = (total - done) * (elapsed / done);
+          const speed = timing.wall > 0 ? (timing.audio / timing.wall).toFixed(2) : '–';
+          setExportStatus(`Part ${done} of ${total} paragraphs · ${formatMinutes(audioSec)} of audio · ` +
+            `generation ${speed}x realtime · ${files} file(s) ready · about ${formatMinutes(left)} left`);
+        },
+        isStopped: () => job.stop,
+      });
+      const speed = timing.wall > 0 ? (timing.audio / timing.wall).toFixed(2) : '–';
+      const stopped = result.stopped ? 'Stopped. ' : 'Done. ';
+      setExportStatus(`${stopped}${result.files} file(s) from ${formatMinutes(result.audioSec)} of audio, generation ${speed}x realtime.`);
+      diag.add(`export ${result.stopped ? 'stopped' : 'finished'}: ${result.files} files, generation ${speed}x`);
+    } catch (err) {
+      reportError(err);
+      setExportStatus('The export stopped because of an error (see the log).');
+    } finally {
+      exporting = null;
+      els.exportStart.disabled = false;
+      els.exportStop.disabled = true;
+      try {
+        await wake?.release();
+      } catch (_) {
+        // Nothing to release.
+      }
+    }
+  }
+
+  function stopExport() {
+    if (!exporting) return;
+    exporting.stop = true;
+    setExportStatus('Stopping after the current paragraph…');
+  }
+
   async function copyPerf() {
     const text = els.perfText.textContent;
     try {
@@ -1108,6 +1261,8 @@
       audio.preservesPitch = true;
     });
     els.perfCopy.addEventListener('click', copyPerf);
+    els.exportStart.addEventListener('click', startExport);
+    els.exportStop.addEventListener('click', stopExport);
     els.prev.addEventListener('click', () => jump(-1));
     els.next.addEventListener('click', () => jump(1));
     els.back.addEventListener('click', closeReader);

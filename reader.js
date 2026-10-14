@@ -223,6 +223,24 @@
     return buffer;
   }
 
+  // Returns the 16-bit samples of a WAV file. Finds the 'data' chunk, and uses the bytes that
+  // are really there if the header claims more (streamed WAVs have placeholder sizes).
+  function wavPcm(buffer) {
+    const bytes = new Uint8Array(buffer);
+    const view = new DataView(buffer);
+    const tag = (offset) => String.fromCharCode(...bytes.subarray(offset, offset + 4));
+    let p = 12;
+    while (p + 8 <= bytes.length) {
+      const size = view.getUint32(p + 4, true);
+      if (tag(p) === 'data') {
+        const length = Math.min(size, bytes.length - (p + 8));
+        return new Int16Array(buffer.slice(p + 8, p + 8 + (length - (length % 2))));
+      }
+      p += 8 + size + (size & 1);
+    }
+    throw new Error('Not a WAV file: no data chunk');
+  }
+
   // Joins mono Float32 chunks and encodes them as a 16-bit PCM WAV file.
   function encodeWav(chunks, sampleRate) {
     let samples = 0;
@@ -286,6 +304,7 @@
     CHUNK_CHARS,
     CHUNK_VERSION,
     fixWavHeader,
+    wavPcm,
     encodeWav,
     parseEpub,
   };
