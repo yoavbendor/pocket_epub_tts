@@ -92,8 +92,9 @@ root folder). The page is then at `https://<user>.github.io/<repo>/`.
 - **Storage**: about 1.3 MB of audio per paragraph, and only the next few paragraphs are kept.
   Clearing Chrome's website data deletes books and positions. Tapping **Delete** removes a
   book and its audio.
-- **Part length** (settings): short is about one sentence per part, medium 2 to 3 sentences, long 3
-  to 5, always whole sentences. Longer parts let the voice carry intonation across sentences and
+- **Part length** (settings): short is about one sentence per part, medium up to 300 characters,
+  long up to 400 characters, always whole sentences. The model garbles longer parts (checked at 842
+  characters, and it fails at 1400), so 400 is the limit. Longer parts let the voice carry intonation across sentences and
   need fewer model runs. A book is split again the next time you open it after a change.
 - **Covers**: the book list shows the EPUB's cover image, taken at upload. Books uploaded
   before this change show a letter instead; delete and upload them again to get the cover.

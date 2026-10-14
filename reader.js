@@ -13,7 +13,7 @@
   const CHUNK_CHARS = 160;
   const CHUNK_VERSION = 4;
   // Part lengths the reader offers, in characters. Each part is whole sentences up to this length.
-  const PART_LENGTHS = { short: CHUNK_CHARS, medium: 300, long: 450 };
+  const PART_LENGTHS = { short: CHUNK_CHARS, medium: 300, long: 400 };
 
   const NAMED_ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
 
