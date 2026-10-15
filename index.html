@@ -119,6 +119,8 @@
     details { margin-top: 12px; }
     summary { color: var(--muted); cursor: pointer; }
     .error { color: var(--danger); }
+    footer { margin-top: 24px; font-size: 0.85rem; }
+    footer a { color: var(--accent); }
   </style>
 </head>
 <body>
@@ -272,6 +274,11 @@
         <p id="current-text"></p>
       </details>
     </section>
+
+    <footer class="muted">
+      Voice: Pocket TTS by Kyutai, model CC BY 4.0. Code: MIT. Attribution and licenses:
+      <a href="https://github.com/yoavbendor/pocket_epub_tts/blob/claude/epub-tts-static-page/THIRD_PARTY_NOTICES.md">THIRD_PARTY_NOTICES.md</a>.
+    </footer>
   </main>
 
   <audio id="player" preload="auto"></audio>

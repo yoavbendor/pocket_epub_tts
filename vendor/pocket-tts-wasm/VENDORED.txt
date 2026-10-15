@@ -22,3 +22,5 @@ Rebuild: see BUILD.md.
 Licenses: worker.js is from the upstream demo (license not verified: GitHub was
 unreachable from the build sandbox). The ptts crate is MIT OR Apache-2.0. The
 wrapper is ours. Check upstream licenses before publishing this page.
+
+Licenses and attribution for everything here: ../../THIRD_PARTY_NOTICES.md (the demo worker's license is not confirmed).

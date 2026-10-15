@@ -18,3 +18,5 @@ GPU have not been measured.
 
 Licenses: ptts and xn are MIT OR Apache-2.0 (LaurentMazare). worker.js is from the
 upstream demo (license not verified). The wrapper and the patch are ours.
+
+Licenses and attribution for everything here: ../../THIRD_PARTY_NOTICES.md (the demo worker's license is not confirmed).

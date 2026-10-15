@@ -148,3 +148,16 @@ node --test tests/reader.test.js
 - Requests go to the server one at a time, since the model runs on a small CPU.
 - The Play tap starts a silent clip before the first real paragraph is ready. That unlocks
   the audio element on iOS, so playback can begin after the server responds.
+
+## License and attribution
+
+- The code written for this project is under the **MIT License** (see `LICENSE`).
+- The voice is **Pocket TTS** by **Kyutai** (https://github.com/kyutai-labs/pocket-tts). The model
+  and voices are **CC BY 4.0** (https://huggingface.co/kyutai/pocket-tts-without-voice-cloning).
+- The browser build of the voice uses **ptts** and **xn** by **Laurent Mazare** (MIT OR Apache-2.0,
+  https://github.com/LaurentMazare/xn-ptts). Its worker comes from Laurent Mazare's demo page; that
+  license is not confirmed yet.
+- The EPUB reader uses **JSZip** (MIT OR GPL-3.0-or-later), and MP3 export uses **lamejs** (LGPL-3.0),
+  both loaded from cdnjs.
+
+Every component, its source, and its license is listed in `THIRD_PARTY_NOTICES.md`.
