@@ -477,10 +477,12 @@
       backend: currentEngine() === 'server' ? 'server' : window.DeviceTTS.getBackend(),
       voice: currentVoice(),
       rate: currentRate(),
+      partLength: currentPartLength(),
     });
   }
 
   function finishRun() {
+    window.PerfLog.sampleBattery('end');
     const summary = window.PerfLog.stop();
     if (summary) sessionRuns.unshift(summary);
     renderPerf();

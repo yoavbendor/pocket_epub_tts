@@ -4,6 +4,8 @@
 // Exposes window.PerfLog:
 //   start(info)          begin a run; info = { backend, voice, rate }
 //   addGeneration(audioSec, wallSec)   one part synthesised
+//   sampleBattery(which)  'start' or 'end'; reads charging and level where the browser allows it
+//   addInfo(key, value)   a note kept with the run (e.g. the part length)
 //   addWait(ms)         time spent waiting for a part during playback
 //   addLoad(ms)         time spent loading the voice model during the run
 //   addGap(ms)          time between one part ending and the next starting
@@ -22,6 +24,12 @@
   const MAX_RUNS = 20;
   let current = null;
 
+  // Generation speed of a set of parts (audio made per second of synthesis).
+  function rtfOf(gens) {
+    const wall = gens.reduce((a, g) => a + g.wallSec, 0);
+    return wall > 0 ? round(gens.reduce((a, g) => a + g.audioSec, 0) / wall, 2) : null;
+  }
+
   // Pure: builds the numbers from a raw run record.
   function summarize(run) {
     const wallSec = (run.endedAt - run.startedAt) / 1000;
@@ -29,6 +37,9 @@
     const genWall = run.gens.reduce((a, g) => a + g.wallSec, 0);
     const stalls = run.waits.filter((w) => w.ms >= 100);
     const gaps = run.gaps || [];
+    // A phone that heats up slows generation over a long run, so compare the first and last quarters.
+    const quarter = Math.max(1, Math.floor(run.gens.length / 4));
+    const notes = run.notes || {};
     return {
       startedAt: new Date(run.startedAt).toISOString(),
       backend: run.info.backend,
@@ -48,7 +59,22 @@
       gaps: gaps.length,
       avgGapMs: gaps.length ? Math.round(gaps.reduce((x, g) => x + g, 0) / gaps.length) : 0,
       longestGapMs: gaps.length ? Math.round(Math.max(...gaps)) : 0,
+      partLength: run.info.partLength || '',
+      rtfFirstQuarter: rtfOf(run.gens.slice(0, quarter)),
+      rtfLastQuarter: rtfOf(run.gens.slice(-quarter)),
+      // The first few stalls with when they happened and which part was being waited for.
+      stallDetail: stalls.slice(0, 5).map((w) => `at ${round((w.at || 0) / 1000, 0)}s, part ${(w.part || 0) + 1}: ${round(w.ms / 1000, 2)}s`),
+      hiddenCount: notes.hiddenCount || 0,
+      hiddenSec: round((notes.hiddenMs || 0) / 1000, 1),
+      batteryStart: run.battery && run.battery.start ? describeBattery(run.battery.start) : 'not readable here',
+      batteryEnd: run.battery && run.battery.end ? describeBattery(run.battery.end) : 'not readable here',
+      heapStartMB: notes.heapStartMB == null ? null : notes.heapStartMB,
+      heapEndMB: notes.heapEndMB == null ? null : notes.heapEndMB,
     };
+  }
+
+  function describeBattery(b) {
+    return `${b.charging ? 'charging' : 'on battery'}, ${b.level}%`;
   }
 
   function round(x, digits) {
@@ -66,6 +92,13 @@
       `  waits during playback: ${s.waits} (total ${s.waitSec}s, longest ${s.longestWaitSec}s)`,
       `  gaps between parts: ${s.gaps} (average ${s.avgGapMs}ms, longest ${s.longestGapMs}ms)`,
     ];
+    lines.push(
+      `  part length ${s.partLength || '-'}; generation first quarter ${s.rtfFirstQuarter == null ? '-' : s.rtfFirstQuarter + 'x'}, last quarter ${s.rtfLastQuarter == null ? '-' : s.rtfLastQuarter + 'x'}`,
+      `  charging: start ${s.batteryStart}, end ${s.batteryEnd}`,
+      `  page hidden during the run: ${s.hiddenCount} time(s), ${s.hiddenSec}s`,
+    );
+    if (s.heapStartMB != null) lines.push(`  memory in use: ${s.heapStartMB} MB at start, ${s.heapEndMB} MB at end`);
+    if (s.stallDetail && s.stallDetail.length) lines.push(`  stalls: ${s.stallDetail.join('; ')}`);
     if (s.device) lines.push(`  device: ${s.device}`);
     return lines.join('\n');
   }
@@ -95,7 +128,46 @@
       waits: [],
       gaps: [],
       firstSoundMs: null,
+      battery: {},
+      notes: { hiddenCount: 0, hiddenMs: 0, hiddenSince: null, heapStartMB: heapMB() },
     };
+    sampleBattery('start');
+  }
+
+  function addInfo(key, value) {
+    if (current) current.info[key] = value;
+  }
+
+  // Memory in use, where the browser reports it (Chrome does; iPhone Safari does not).
+  function heapMB() {
+    const used = typeof performance !== 'undefined' && performance.memory ? performance.memory.usedJSHeapSize : null;
+    return used == null ? null : round(used / 1048576, 1);
+  }
+
+  // Charging and battery level, where the browser reports them (not iPhone Safari).
+  function sampleBattery(which) {
+    if (typeof navigator === 'undefined' || !navigator.getBattery) return;
+    navigator.getBattery().then((b) => {
+      if (!current) return;
+      const sample = { charging: b.charging, level: Math.round(b.level * 100) };
+      if (which === 'start') current.battery.start = sample;
+      current.battery.end = sample;
+    }).catch(() => {});
+  }
+
+  // Counts how often the page was hidden during a run (locked screen, switched app) and for how long.
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+      if (!current) return;
+      const n = current.notes;
+      if (document.visibilityState === 'hidden') {
+        n.hiddenCount++;
+        n.hiddenSince = Date.now();
+      } else if (n.hiddenSince) {
+        n.hiddenMs += Date.now() - n.hiddenSince;
+        n.hiddenSince = null;
+      }
+    });
   }
 
   function deviceText() {
@@ -106,6 +178,7 @@
 
   function addGeneration(audioSec, wallSec) {
     if (current) current.gens.push({ audioSec, wallSec });
+    sampleBattery('end');
   }
 
   function addGap(ms) {
@@ -117,7 +190,7 @@
   }
 
   function addWait(ms) {
-    if (current) current.waits.push({ ms });
+    if (current) current.waits.push({ ms, at: Date.now() - current.startedAt, part: current.gens.length });
   }
 
   // Time from Play to the first sound, measured from the start of the run.
@@ -127,6 +200,8 @@
 
   function stop() {
     if (!current) return null;
+    if (current.notes.hiddenSince) current.notes.hiddenMs += Date.now() - current.notes.hiddenSince;
+    current.notes.heapEndMB = heapMB();
     const run = { ...current, endedAt: Date.now() };
     current = null;
     if (run.gens.length === 0 && run.firstSoundMs == null) return null;
@@ -139,5 +214,5 @@
     return load();
   }
 
-  return { start, addGeneration, addWait, addGap, addLoad, markFirstSound, stop, runs, format, summarize };
+  return { start, addInfo, addGeneration, addWait, addGap, addLoad, markFirstSound, sampleBattery, stop, runs, format, summarize };
 });

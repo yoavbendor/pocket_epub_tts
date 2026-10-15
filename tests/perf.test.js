@@ -36,3 +36,37 @@ test('format produces the lines a person can paste back', () => {
   assert.match(text, /first sound after 0.5s/);
   assert.match(text, /generation 2x \(audio made per second of synthesis/);
 });
+
+test('summarize reports part length, the speed trend, stalls with timing, and hidden time', () => {
+  const gens = [];
+  for (let i = 0; i < 8; i++) gens.push({ audioSec: 10, wallSec: i < 4 ? 4 : 5 }); // slows down in the second half
+  const s = P.summarize({
+    startedAt: 0,
+    endedAt: 120000,
+    info: { backend: 'cpu', voice: 'alba', rate: 1.2, partLength: 'long' },
+    gens,
+    waits: [{ ms: 1900, at: 52000, part: 5 }],
+    firstSoundMs: 300,
+    battery: { start: { charging: true, level: 80 }, end: { charging: false, level: 75 } },
+    notes: { hiddenCount: 2, hiddenMs: 4500, heapStartMB: 120, heapEndMB: 140 },
+  });
+  assert.equal(s.partLength, 'long');
+  assert.equal(s.rtfFirstQuarter, 2.5);
+  assert.equal(s.rtfLastQuarter, 2);
+  assert.deepEqual(s.stallDetail, ['at 52s, part 6: 1.9s']);
+  assert.equal(s.hiddenCount, 2);
+  assert.equal(s.hiddenSec, 4.5);
+  assert.equal(s.batteryStart, 'charging, 80%');
+  assert.equal(s.batteryEnd, 'on battery, 75%');
+  const text = P.format(s);
+  assert.match(text, /part length long; generation first quarter 2.5x, last quarter 2x/);
+  assert.match(text, /stalls: at 52s, part 6: 1.9s/);
+  assert.match(text, /charging: start charging, 80%, end on battery, 75%/);
+});
+
+test('summarize says when battery and memory are not readable', () => {
+  const s = P.summarize({ startedAt: 0, endedAt: 1000, info: { backend: 'cpu', voice: 'alba', rate: 1 }, gens: [{ audioSec: 1, wallSec: 1 }], waits: [], firstSoundMs: 1 });
+  assert.equal(s.batteryStart, 'not readable here');
+  assert.equal(s.heapStartMB, null);
+  assert.match(P.format(s), /charging: start not readable here/);
+});
